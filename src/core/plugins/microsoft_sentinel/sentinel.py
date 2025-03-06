@@ -160,6 +160,42 @@ class Sentinel:
         }
 
     @staticmethod
+    def transform_eslint_event(event):
+        """Transforms an ESLint event into the correct Sentinel schema."""
+        return {
+            "TimeGenerated": datetime.now(timezone.utc).isoformat(),
+            "SourceComputerId": event.get("cwd", "Unknown"),
+            "OperationStatus": "Success" if event.get("messages") else "Failure",
+            "Detail": event.get("file_path", "Unknown File"),
+            "OperationCategory": "Linting",
+            "Solution": "Review ESLint rules and fix reported issues",
+            "Message": f"ESLint detected issues in {event.get('file_path', 'Unknown')}.",
+            "FilePath": event.get("file_path", "Unknown"),
+            "Timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "Plugin": "ESLint",
+            "Severity": "HIGH" if any(msg.get("severity", 1) == 2 for msg in event.get("messages", [])) else "LOW",
+            "SourceType": "Linting"
+        }
+
+    @staticmethod
+    def transform_trivy_event(event):
+        """Transforms a Trivy event into the correct Sentinel schema."""
+        return {
+            "TimeGenerated": datetime.now(timezone.utc).isoformat(),
+            "SourceComputerId": event.get("cwd", "Unknown"),
+            "OperationStatus": "Success" if event.get("Type") else "Failure",
+            "Detail": event.get("Target", "Unknown Target"),
+            "OperationCategory": "Vulnerability Scanning",
+            "Solution": "Check dependencies and apply patches if necessary",
+            "Message": f"Trivy scan detected issues in {event.get('Target', 'Unknown')}.",
+            "FilePath": event.get("Target", "Unknown"),
+            "Timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "Plugin": "Trivy",
+            "Severity": "HIGH" if event.get("Type") == "Critical" else "LOW",
+            "SourceType": event.get("Type", "Unknown")
+        }
+
+    @staticmethod
     def normalize_events(events: list, plugin_name: str):
         """Detects event type and normalizes them for Sentinel ingestion."""
         formatted_events = []
