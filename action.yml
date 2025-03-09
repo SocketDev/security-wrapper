@@ -50,6 +50,16 @@ inputs:
     required: false
     default: ""
 
+  # ESLint Configuration
+  eslint_exclude_dir:
+    description: "Comma-separated list of directories to exclude in ESLint"
+    required: false
+    default: ""
+  eslint_rules:
+    description: "Custom ESLint rules or plugins to enable"
+    required: false
+    default: ""
+
 branding:
   icon: "shield"
   color: "blue"

@@ -24,6 +24,12 @@ RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main
 # Install Bandit
 RUN pip install bandit
 
+# Install eslint
+RUN apt-get update && apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g eslint eslint-plugin-security @typescript-eslint/parser @typescript-eslint/eslint-plugin
+
 # Copy the entrypoint script and make it executable
 RUN chmod +x /entrypoint.sh
 

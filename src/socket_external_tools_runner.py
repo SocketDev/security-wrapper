@@ -1,135 +1,132 @@
 import json
 import logging
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("example")
-
+import os
+import glob
+import inspect
 from core import marker
 from core.scm import SCM
 from core.connectors.bandit import Bandit
 from core.connectors.gosec import Gosec
 from core.connectors.trufflehog import Trufflehog
+from core.connectors.trivy import TrivyImage, TrivyDockerfile
+from core.connectors.eslint import ESLint
 from core.load_plugins import load_sumo_logic_plugin, load_ms_sentinel_plugin
-import os
 
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("example")
 
 SCM_DISABLED = os.getenv("SOCKET_SCM_DISABLED", "false").lower() == "true"
 GIT_DIR = os.getenv("GITHUB_REPOSITORY", None)
+SEVERITIES= os.getenv("INPUT_FINDING_SEVERITIES")
+if SEVERITIES is not None:
+    SEVERITIES = set(SEVERITIES.split(","))
 if not GIT_DIR and SCM_DISABLED:
     print("GIT_DIR is not set and is required if SCM_DISABLED=true")
     exit(1)
 
+def load_json(filename, connector: str) -> dict:
+    """Loads JSON or NDJSON files, handling Trufflehog's NDJSON format."""
+    try:
+        with open(filename, 'r') as file:
+            if connector.lower() == "trufflehog":
+                return {"Issues": [json.loads(line) for line in file]}
+            else:
+                return json.load(file)
+    except FileNotFoundError:
+        print(f"No results found for {connector}")
+        return {}
 
-def format_events(events):
-    formatted_events = []
-
-    for event in events:
-        if isinstance(event, str):  # If it's a JSON string, parse it into a dictionary
-            try:
-                event = json.loads(event)  # Convert string to dictionary
-            except json.JSONDecodeError:
-                print(f"Skipping invalid event: {event}")
-                continue  # Skip invalid JSON entries
-
-        formatted_events.append(event)  # Append properly formatted event
-
-    return formatted_events
-
-
-def load_json(name, connector: str, connector_type: str = 'single') -> dict:
-    json_data = {}
-    if connector_type == 'single':
-        try:
-            file = open(name, 'r')
-            json_data = json.load(file)
-            file.close()
-        except FileNotFoundError:
-            print(f"No results found for {connector}")
-    else:
-        try:
-            file = open(name, 'r')
-            json_data = {"Issues": []}
-            for line in file.readlines():
-                try:
-                    entry = json.loads(line)
-                    json_data['Issues'].append(entry)
-                except Exception as error:
-                    print(f"Unable to load entry {line} for {connector}")
-                    print(error)
-        except FileNotFoundError:
-            print(f"No results found for {connector}")
-    return json_data
-
+def consolidate_trivy_results(pattern: str) -> dict:
+    """Consolidates multiple Trivy result JSONs into a single structure."""
+    consolidated_results = {"Results": []}
+    for filename in glob.glob(pattern):
+        data = load_json(filename, "Trivy")
+        if "Results" in data:
+            consolidated_results["Results"].extend(data["Results"])
+    return consolidated_results
 
 sumo_client = load_sumo_logic_plugin()
 ms_sentinel = load_ms_sentinel_plugin()
 
-tool_bandit_name = "Bandit"
-tool_gosec_name = "Gosec"
-tool_trufflehog_name = "Trufflehog"
-bandit_name = "bandit_output.json"
-gosec_name = "gosec_output.json"
-trufflehog_name = "trufflehog_output.json"
-bandit_data = load_json(bandit_name, 'bandit')
-gosec_data = load_json(gosec_name, 'gosec')
-truffle_data = load_json(trufflehog_name, 'truffle', 'multi')
+# Define tool names
+TOOL_CLASSES = {
+    "bandit": Bandit,
+    "gosec": Gosec,
+    "trufflehog": Trufflehog,
+    "trivy_image": TrivyImage,
+    "trivy_dockerfile": TrivyDockerfile,
+    "eslint": ESLint
+}
 
+TOOL_NAMES = {
+    "bandit": "Bandit",
+    "gosec": "Gosec",
+    "trufflehog": "Trufflehog",
+    "trivy_image": "TrivyImageScanning",
+    "trivy_dockerfile": "TrivyDockerfileScanning",
+    "eslint": "ESLint"
+}
 
-if bandit_data or gosec_data or truffle_data:
+# Load results
+results = {
+    "bandit": load_json("../bandit_output.json", "Bandit"),
+    "gosec": load_json("../gosec_output.json", "Gosec"),
+    "trufflehog": load_json("../trufflehog_output.json", "Trufflehog"),
+    "trivy_image": consolidate_trivy_results("../trivy_image_*.json"),
+    "trivy_dockerfile": consolidate_trivy_results("../trivy_dockerfile_*.json"),
+    "eslint": load_json("../eslint_output.json", "ESLint")
+}
+
+if any(results.values()):
     if not SCM_DISABLED:
         scm = SCM()
-        bandit_marker = marker.replace("REPLACE_ME", tool_bandit_name)
-        bandit_output, bandit_result = Bandit.create_output(
-            bandit_data,
-            bandit_marker,
-            scm.github.repo,
-            scm.github.commit,
-            scm.github.cwd
-        )
-        gosec_marker = marker.replace("REPLACE_ME", tool_gosec_name)
-        gosec_result = Gosec.create_output(
-            gosec_data,
-            gosec_marker,
-            scm.github.repo,
-            scm.github.commit,
-            scm.github.cwd
-        )
-        trufflehog_marker = marker.replace("REPLACE_ME", tool_trufflehog_name)
-        truffle_output, truffle_result = Trufflehog.create_output(
-            truffle_data,
-            trufflehog_marker,
-            scm.github.repo,
-            scm.github.commit,
-            scm.github.cwd
-        )
-        scm.github.post_comment(tool_bandit_name, bandit_marker, bandit_result)
-        scm.github.post_comment(tool_gosec_name, gosec_marker, gosec_result)
-        scm.github.post_comment(tool_trufflehog_name, trufflehog_marker, truffle_output)
+        tool_outputs = {}
+        tool_events = {}
 
-        bandit_events = bandit_result.get("events", [])
-        gosec_events = gosec_result.get("events", [])
-        truffle_events = truffle_result.get("events", [])
+        for key, data in results.items():
+            if data:
+                tool_marker = marker.replace("REPLACE_ME", TOOL_NAMES[key])
+                tool_class = TOOL_CLASSES[key]
+                if SEVERITIES:
+                    tool_class.default_severities = SEVERITIES
+
+                supports_show_unverified = "show_unverified" in inspect.signature(tool_class.process_output).parameters
+                if supports_show_unverified:
+                    show_unverified = os.getenv("INPUT_TRUFFLEHOG_SHOW_UNVERIFIED", "false").lower() == "true"
+                    tool_outputs[key], tool_results = tool_class.create_output(
+                        data,
+                        tool_marker,
+                        scm.github.repo,
+                        scm.github.commit,
+                        scm.github.cwd,
+                        show_unverified=show_unverified
+                    )
+                else:
+                    tool_outputs[key], tool_results = tool_class.create_output(
+                        data, tool_marker, scm.github.repo, scm.github.commit, scm.github.cwd
+                    )
+                tool_events[key] = tool_outputs[key].get("events", [])
+                if tool_events[key]:
+                    scm.github.post_comment(TOOL_NAMES[key], tool_marker, tool_results)
+
         print("Issues detected with Security Tools. Please check PR comments")
     else:
-        bandit_events = Bandit.process_output(bandit_data, GIT_DIR, bandit_name)
-        gosec_events = Gosec.process_output(gosec_data, GIT_DIR, gosec_name)
-        truffle_events = Trufflehog.process_output(truffle_data, GIT_DIR, trufflehog_name)
+        tool_events = {
+            key: TOOL_CLASSES[key].process_output(data, GIT_DIR, TOOL_NAMES[key])
+            for key, data in results.items() if data
+        }
 
     if sumo_client:
         print("Issues detected with Security Tools. Please check Sumologic Events")
-        print(errors) if (errors := sumo_client.send_events(bandit_events.get("events"), bandit_name)) else []
-        print(errors) if (errors := sumo_client.send_events(gosec_events.get("events"), gosec_name)) else []
-        print(errors) if (errors := sumo_client.send_events(truffle_events.get("events"), trufflehog_name)) else []
+        for key, events in tool_events.items():
+            print(errors) if (errors := sumo_client.send_events(events.get("events"), "../" + key + "_output.json")) else []
+
     if ms_sentinel:
         print("Issues detected with Security Tools. Please check Microsoft Sentinel Events")
-        ms_bandit_name = f"SocketSecurityToolsBandit"
-        ms_gosec_name = f"SocketSecurityToolsGosec"
-        ms_trufflehog_name = f"SocketSecurityToolsTrufflehog"
-        ms_bandit_events = format_events(bandit_events.get("events"))
-        ms_gosec_events = format_events(gosec_events.get("events"))
-        ms_trufflehog_events = format_events(truffle_events.get("events"))
-        print(errors) if (errors := ms_sentinel.send_events(ms_bandit_events, ms_bandit_name)) else []
-        print(errors) if (errors := ms_sentinel.send_events(ms_gosec_events, ms_gosec_name)) else []
-        print(errors) if (errors := ms_sentinel.send_events(ms_trufflehog_events, ms_trufflehog_name)) else []
+        for key, events in tool_events.items():
+            sentinel_name = f"SocketSecurityTools{TOOL_NAMES[key]}"
+            formatted_events = [json.dumps(event) for event in events.get("events", [])]
+            print(errors) if (errors := ms_sentinel.send_events(formatted_events, sentinel_name)) else []
     exit(1)
 else:
     print("No issues detected with Socket Security Tools")

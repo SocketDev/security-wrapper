@@ -1,64 +1,39 @@
-from core.connectors.gosec.classes import GosecTestResult
-from mdutils import MdUtils
-from typing import Union
+from core.connectors.classes import GosecTestResult
+from core import BaseTool
 import json
 
 
-class Gosec:
-    @staticmethod
-    def process_output(data: dict, cwd: str, plugin_name: str = None) -> dict:
-        results = data.get("Issues")
-        tests = []
+class Gosec(BaseTool):
+    result_class = GosecTestResult
+    result_key = "Issues"
+    default_severities = {"CRITICAL"}
+
+    @classmethod
+    def process_output(cls, data: dict, cwd: str, plugin_name: str = "Gosec") -> dict:
+        """Processes Gosec output, ensuring compatibility with create_output."""
         metrics = {
             "tests": {},
             "severities": {},
             "output": [],
             "events": []
-            # "code": []
         }
-        if results is not None and len(results) > 0:
-            for test in results:
-                test_result = GosecTestResult(**test, cwd=cwd)
-                test_result.plugin_name = plugin_name
-                tests.append(test_result)
-                test_name = f"{test_result.rule_id}_{test_result.severity}"
-                if test_result.severity not in metrics["severities"]:
-                    metrics["severities"][test_result.severity] = 1
-                else:
-                    metrics["severities"][test_result.severity] += 1
 
-                if test_name not in metrics["tests"]:
-                    metrics["tests"][test_name] = 1
-                else:
-                    metrics["tests"][test_name] += 1
-                metrics["output"].append(test_result)
-                metrics["events"].append(json.dumps(test_result.__dict__))
-                # metrics["code"].append(test_result.code)
+        results = data.get(cls.result_key, [])
+        for entry in results:
+            test_result = cls.result_class(**entry, cwd=cwd)
+            test_result.plugin_name = plugin_name
+            test_result.file = test_result.file  # Ensure compatibility with create_output()
+
+            test_name = cls.get_test_name(test_result)
+
+            metrics["tests"].setdefault(test_name, 0)
+            metrics["tests"][test_name] += 1
+
+            metrics["output"].append(test_result)
+            metrics["events"].append(json.dumps(test_result.__dict__))
 
         return metrics
 
     @staticmethod
-    def create_output(data: dict, marker: str, repo: str, commit: str, cwd: str) -> (Union[str, None], dict):
-        gosec_result = Gosec.process_output(data, cwd=cwd) # nosec
-        output_str = None
-        md = MdUtils(file_name="sast_gosec_comments.md")
-        if len(gosec_result['output']) > 0:
-            md.new_line()
-            md.new_line(marker)
-            md.new_line()
-            for output in gosec_result["output"]:
-                output: GosecTestResult
-                if hasattr(output, "url"):
-                    file = output.url.replace("REPO_REPLACE", repo).replace("COMMIT_REPLACE", commit)
-                    file_name = f"[{output.file}]({file})"
-                else:
-                    file_name = f"`{output.file}`"
-                md.new_line(f"**{output.details}**")
-                md.new_line(f"**Severity**: `{output.severity}`")
-                md.new_line(f"**Filename:** {file_name}")
-                md.insert_code(output.code, language='go')
-                md.new_line("<br>")
-                md.new_line()
-            md.create_md_file()
-            output_str = md.file_data_text.lstrip()
-        return output_str, gosec_result
+    def get_test_name(test_result):
+        return f"Gosec_{test_result.rule_id}_{test_result.severity}"
