@@ -36,16 +36,17 @@ class Trufflehog(BaseTool):
                 test_result.file = test_result.file.replace(cwd, '').lstrip("/")
                 test_result.secret = entry.get("Raw", "")[:6] + "*" * (len(entry.get("Raw", "")) - 6)
                 test_result.detection = f"{entry.get('DetectorName', '')} - {entry.get('DecoderName', '')}"
-                test_result.issue_text = (
-                    f"Detection: {test_result.detection}\n"
-                    f"**Verified:** `{verified}`\n"
-                    f"**Secret:** `{test_result.secret}`"
-                )
                 if verified:
                     test_result.severity = "Critical"
                 else:
                     test_result.severity = "Low"
-
+                test_result.use_custom = True
+                test_result.issue_text = (
+                    f"**Detection:** {test_result.detection}\n"
+                    f"**Verified:** `{verified}`\n"
+                    f"**Secret:** `{test_result.secret}`"
+                    f"Filename: {test_result.file}"
+                )
                 metrics["output"].append(test_result)
                 metrics["events"].append(json.dumps(test_result.__dict__))
 

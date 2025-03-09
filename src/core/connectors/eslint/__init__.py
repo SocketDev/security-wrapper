@@ -104,8 +104,8 @@ class ESLint(BaseTool):
                     cwd=cwd
                 )
                 test_result.plugin_name = plugin_name
-
                 test_name = cls.get_test_name(test_result)
+                test_result.use_custom = True
                 metrics["tests"].setdefault(test_name, 0)
                 metrics["tests"][test_name] += 1
                 metrics["output"].append(test_result)

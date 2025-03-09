@@ -100,14 +100,14 @@ class BaseTool:
                     md.new_line(output.__dict__.get("first_line", ""))
                     set_first_line = True
                 use_custom = output.__dict__.get("use_custom", False)
-                if not use_custom and "Rule:" not in output.__dict__.get("issue_text", ""):
+                if not use_custom:
                     md.new_line(f"**{output.__dict__.get('issue_text', 'Detection')}**")
                     md.new_line(f"**Severity**: `{output.__dict__.get('severity', 'N/A')}`")
                     md.new_line(f"**Filename:** {file_link}")
                 else:
-                    md.new_line(
-                        f"{output.__dict__.get('issue_text', '').replace('REPO_REPLACE', repo).replace('COMMIT_REPLACE', commit)}"
-                    )
+                    source = output.__dict__.get('issue_text', '').replace('REPLACE_FILE_LINK', file_link)
+                    issue_text = f"{source.replace('REPO_REPLACE', repo).replace('COMMIT_REPLACE', commit)}"
+                    md.new_line(issue_text)
 
                 if hasattr(output, "code"):
                     language = "python" if "Bandit" in cls.__name__ else "go" if "Gosec" in cls.__name__ else ""

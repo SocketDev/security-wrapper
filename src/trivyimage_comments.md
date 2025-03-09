@@ -4,7 +4,7 @@
   
 <!--Socket External Tool Runner: TrivyImageScanning -->  
   
-# Image trickyhu/sigsci-rule-editor:latest (debian 10.6) Result<br>
+# Image: trickyhu/sigsci-rule-editor:latest (debian 10.6) Result<br>
   
 |Package|Findings|
 | :--- | :--- |

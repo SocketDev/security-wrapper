@@ -112,7 +112,7 @@ class TrivyDockerfile(BaseTool):
             for misconfig in result.get("Misconfigurations", []):
                 test_result = cls.result_class(
                     Description=f"{misconfig['Type']} - {misconfig['ID']} - {misconfig['AVDID']}",
-                    Title=misconfig.get("Title", ""),
+                    Title=misconfig.get("Title", "").replace("'", "`"),
                     Severity=misconfig.get("Severity", "UNKNOWN"),
                     File=result.get("Target", "Unknown"),
                     URL=misconfig.get("PrimaryURL", "")
@@ -123,8 +123,10 @@ class TrivyDockerfile(BaseTool):
                     f"**Detection:** {test_result.description}\n"
                     f"**Title:** {test_result.title}\n"
                     f"**Severity:** {test_result.severity}\n"
+                    f"**Filename:** REPLACE_FILE_LINK"
                 )
                 test_result.plugin_name = plugin_name
+                test_result.use_custom = True
                 cls.extract_additional_data(test_result, cwd)
                 metrics["events"].append(test_result)
                 metrics["output"].append(test_result)

@@ -103,6 +103,7 @@ class ESLintTestResult(BaseTestResult):
         self.cwd = ""
         self.timestamp = ""
         self.plugin_name = "ESLint"
+        self.rule_id = ""
         super().__init__(**kwargs)
 
     def set_url(self):
