@@ -69,12 +69,12 @@ TOOL_NAMES = {
 
 # Load results
 results = {
-    "bandit": load_json("../bandit_output.json", "Bandit"),
-    "gosec": load_json("../gosec_output.json", "Gosec"),
-    "trufflehog": load_json("../trufflehog_output.json", "Trufflehog"),
-    "trivy_image": consolidate_trivy_results("../trivy_image_*.json"),
-    "trivy_dockerfile": consolidate_trivy_results("../trivy_dockerfile_*.json"),
-    "eslint": load_json("../eslint_output.json", "ESLint")
+    "bandit": load_json("bandit_output.json", "Bandit"),
+    "gosec": load_json("gosec_output.json", "Gosec"),
+    "trufflehog": load_json("trufflehog_output.json", "Trufflehog"),
+    "trivy_image": consolidate_trivy_results("trivy_image_*.json"),
+    "trivy_dockerfile": consolidate_trivy_results("trivy_dockerfile_*.json"),
+    "eslint": load_json("eslint_output.json", "ESLint")
 }
 
 if any(results.values()):
