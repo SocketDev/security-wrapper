@@ -95,6 +95,6 @@ if [[ "$INPUT_SECRET_SCANNING_ENABLED" == "true" ]]; then
 fi
 
 # Execute the custom Python script to process findings
-#cd /
+cd /
 mv /tmp/*.json .
-#python socket_external_tools_runner.py
+python socket_external_tools_runner.py
