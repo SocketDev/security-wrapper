@@ -7,19 +7,13 @@ import inspect
 log = logging.getLogger("socket-external-tool")
 log.addHandler(logging.NullHandler())
 
-__all__ = [
-    "marker",
-    "__version__",
-    "__author__",
-    "log",
-    "base_github"
-]
+__all__ = ["marker", "__version__", "__author__", "log", "base_github"]
 
-__version__ = "1.0.15"
+__version__ = "1.0.16"
 __author__ = "socket.dev"
 base_github = "https://github.com"
 
-marker = f"<!--Socket External Tool Runner: REPLACE_ME -->"
+marker = "<!--Socket External Tool Runner: REPLACE_ME -->"
 
 
 class BaseTool:
@@ -29,12 +23,7 @@ class BaseTool:
     @classmethod
     def process_output(cls, data: dict, cwd: str, plugin_name: str = "") -> dict:
         results = data.get(cls.result_key, [])
-        metrics = {
-            "tests": {},
-            "severities": {},
-            "output": [],
-            "events": []
-        }
+        metrics = {"tests": {}, "severities": {}, "output": [], "events": []}
 
         for test in results:
             test_result = cls.result_class(**test, cwd=cwd)
@@ -67,8 +56,9 @@ class BaseTool:
         return "test_result"
 
     @classmethod
-    def create_output(cls, data: dict, marker: str, repo: str, commit: str, cwd: str, show_unverified=None) -> (
-    Union[str, None], dict):
+    def create_output(
+        cls, data: dict, marker: str, repo: str, commit: str, cwd: str, show_unverified=None
+    ) -> (Union[str, None], dict):
         """Formats output as properly structured Markdown."""
 
         # Determine if the connector supports the show_verified argument
@@ -93,7 +83,8 @@ class BaseTool:
             for output in result["output"]:
                 file_link = (
                     f"[{output.file}]({output.url.replace('REPO_REPLACE', repo).replace('COMMIT_REPLACE', commit)})"
-                    if hasattr(output, "url") else f"`{output.file}`"
+                    if hasattr(output, "url")
+                    else f"`{output.file}`"
                 )
                 has_first_line = output.__dict__.get("has_first_line", False)
                 if has_first_line and not set_first_line:
@@ -105,7 +96,7 @@ class BaseTool:
                     md.new_line(f"**Severity**: `{output.__dict__.get('severity', 'N/A')}`")
                     md.new_line(f"**Filename:** {file_link}")
                 else:
-                    source = output.__dict__.get('issue_text', '').replace('REPLACE_FILE_LINK', file_link)
+                    source = output.__dict__.get("issue_text", "").replace("REPLACE_FILE_LINK", file_link)
                     issue_text = f"{source.replace('REPO_REPLACE', repo).replace('COMMIT_REPLACE', commit)}"
                     md.new_line(issue_text)
 
@@ -120,4 +111,3 @@ class BaseTool:
             output_str = md.file_data_text.lstrip()
 
         return result, output_str
-
