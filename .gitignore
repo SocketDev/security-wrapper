@@ -21,3 +21,4 @@ test.py
 *.cpython-312.pyc`
 file_generator.py
 .env
+*.md
