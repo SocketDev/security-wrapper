@@ -19,6 +19,10 @@ inputs:
     description: "Rules to enable in Trufflehog"
     required: false
     default: ""
+  trufflehog_show_unverified:
+    description: "Show unverified secrets in Trufflehog results"
+    required: false
+    default: "false"
 
   # Bandit Configuration
   bandit_exclude_dir:
@@ -107,12 +111,6 @@ inputs:
     description: "Comma-separated list of Dockerfiles to scan"
     required: false
     default: ""
-
-  # Trufflehog Configuration
-  trufflehog_show_unverified:
-    description: "Show unverified secrets in Trufflehog results"
-    required: false
-    default: "false"
 
   # Log Forwarding Configuration
   sumo_logic_enabled:
