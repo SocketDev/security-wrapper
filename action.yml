@@ -10,6 +10,47 @@ inputs:
     description: "GitHub token to post comments on PRs"
     required: true
 
+  # Enable Settings
+  python_sast_enabled:
+    description: "Enable Python SAST analysis"
+    required: false
+    default: "false"
+
+  golang_sast_enabled:
+    description: "Enable Golang SAST analysis"
+    required: false
+    default: "false"
+
+  javascript_sast_enabled:
+    description: "Enable JavaScript SAST analysis"
+    required: false
+    default: "false"
+
+  dockerfile_enabled:
+    description: "Enable Dockerfile analysis"
+    required: false
+    default: "false"
+
+  image_enabled:
+    description: "Enable image scanning"
+    required: false
+    default: "false"
+
+  secret_scanning_enabled:
+    description: "Enable secret scanning"
+    required: false
+    default: "false"
+
+  # Docker Configuration
+  docker_images:
+    description: "Comma-separated list of Docker images to scan"
+    required: false
+    default: ""
+  dockerfiles:
+    description: "Comma-separated list of Dockerfiles to scan"
+    required: false
+    default: ""
+
   # Trufflehog Configuration
   trufflehog_exclude_dir:
     description: "Comma-separated list of directories to exclude in Trufflehog"
@@ -61,54 +102,6 @@ inputs:
     default: ""
   eslint_rules:
     description: "Custom ESLint rules or plugins to enable"
-    required: false
-    default: ""
-
-  # Python SAST Configuration
-  python_sast_enabled:
-    description: "Enable Python SAST analysis"
-    required: false
-    default: "false"
-
-  # Golang SAST Configuration
-  golang_sast_enabled:
-    description: "Enable Golang SAST analysis"
-    required: false
-    default: "false"
-
-  # JavaScript SAST Configuration
-  javascript_sast_enabled:
-    description: "Enable JavaScript SAST analysis"
-    required: false
-    default: "false"
-
-  # Dockerfile Configuration
-  dockerfile_enabled:
-    description: "Enable Dockerfile analysis"
-    required: false
-    default: "false"
-
-  # Image Configuration
-  image_enabled:
-    description: "Enable image scanning"
-    required: false
-    default: "false"
-
-  # Secret Scanning Configuration
-  secret_scanning_enabled:
-    description: "Enable secret scanning"
-    required: false
-    default: "false"
-
-  # Docker Images Configuration
-  docker_images:
-    description: "Comma-separated list of Docker images to scan"
-    required: false
-    default: ""
-
-  # Dockerfiles Configuration
-  dockerfiles:
-    description: "Comma-separated list of Dockerfiles to scan"
     required: false
     default: ""
 
