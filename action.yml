@@ -4,11 +4,52 @@ author: "Douglas Coburn"
 runs:
   using: "docker"
   image: "Dockerfile"
-  
+
 inputs:
   github_token:
     description: "GitHub token to post comments on PRs"
     required: true
+
+  # Enable Settings
+  python_sast_enabled:
+    description: "Enable Python SAST analysis"
+    required: false
+    default: "false"
+
+  golang_sast_enabled:
+    description: "Enable Golang SAST analysis"
+    required: false
+    default: "false"
+
+  javascript_sast_enabled:
+    description: "Enable JavaScript SAST analysis"
+    required: false
+    default: "false"
+
+  dockerfile_enabled:
+    description: "Enable Dockerfile analysis"
+    required: false
+    default: "false"
+
+  image_enabled:
+    description: "Enable image scanning"
+    required: false
+    default: "false"
+
+  secret_scanning_enabled:
+    description: "Enable secret scanning"
+    required: false
+    default: "false"
+
+  # Docker Configuration
+  docker_images:
+    description: "Comma-separated list of Docker images to scan"
+    required: false
+    default: ""
+  dockerfiles:
+    description: "Comma-separated list of Dockerfiles to scan"
+    required: false
+    default: ""
 
   # Trufflehog Configuration
   trufflehog_exclude_dir:
@@ -19,6 +60,10 @@ inputs:
     description: "Rules to enable in Trufflehog"
     required: false
     default: ""
+  trufflehog_show_unverified:
+    description: "Show unverified secrets in Trufflehog results"
+    required: false
+    default: "false"
 
   # Bandit Configuration
   bandit_exclude_dir:
@@ -60,7 +105,30 @@ inputs:
     required: false
     default: ""
 
+  # Log Forwarding Configuration
+  sumo_logic_enabled:
+    description: "Enable Sumo Logic log forwarding"
+    required: false
+    default: "false"
+  sumo_logic_http_source_url:
+    description: "HTTP source URL for Sumo Logic"
+    required: false
+    default: ""
+
+  # Microsoft Sentinel Configuration
+  ms_sentinel_enabled:
+    description: "Enable Microsoft Sentinel log forwarding"
+    required: false
+    default: "false"
+  ms_sentinel_workspace_id:
+    description: "Workspace ID for Microsoft Sentinel"
+    required: false
+    default: "REPLACE_ME"
+  ms_sentinel_shared_key:
+    description: "Shared key for Microsoft Sentinel"
+    required: false
+    default: "REPLACE_ME"
+
 branding:
   icon: "shield"
   color: "blue"
-
