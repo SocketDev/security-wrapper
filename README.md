@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4.2.1
       
       - name: Run Security Scan and Comment Action
-        uses: dacoburn/security-tools@1.0.10
+        uses: dacoburn/security-tools@1.0.16
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
