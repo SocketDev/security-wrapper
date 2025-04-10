@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4.2.1
       
       - name: Run Security Scan and Comment Action
-        uses: SocketDev/security-wrapper@1.0.16
+        uses: SocketDev/security-wrapper@1.0.17
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -45,6 +45,21 @@ jobs:
           bandit_rules: "B101,B102,B105,B106,B107,B110,B603,B605,B607"
           gosec_rules: "medium"
           gosec_exclude_dir: "tests,migrations,tests,test,.venv,venv"
+          eslint_rules: >
+            security/detect-eval-with-expression,
+            security/detect-non-literal-require,
+            security/detect-non-literal-fs-filename,
+            security/detect-buffer-noassert,
+            security/detect-new-buffer,
+            security/detect-unsafe-regex,
+            security/detect-disable-mustache-escape,
+            security/detect-no-csrf-before-method-override,
+            security/detect-pseudoRandomBytes,
+            security/detect-possible-timing-attacks,
+            security/detect-bidi-characters,
+            security/detect-child-process,
+            security/detect-non-literal-regexp,
+            security/detect-object-injection
 
           # Log forwarding
           sumo_logic_enabled: true

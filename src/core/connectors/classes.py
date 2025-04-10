@@ -28,8 +28,14 @@ class BaseTestResult:
     def set_timestamp(self):
         self.timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S,%f")[:-3] + " +0000"
 
+    # Add a method to convert the object to a dictionary
+    def to_json(self):
+        """Convert the object to a dictionary for JSON serialization."""
+        return self.__dict__
+
+    # Ensure the object string representation works well with JSON
     def __str__(self):
-        return json.dumps(self.__dict__)
+        return json.dumps(self.to_json())
 
 
 class BanditTestResult(BaseTestResult):
@@ -104,6 +110,7 @@ class ESLintTestResult(BaseTestResult):
         self.timestamp = ""
         self.plugin_name = "ESLint"
         self.rule_id = ""
+        self.severity = ""
         super().__init__(**kwargs)
 
     def set_url(self):

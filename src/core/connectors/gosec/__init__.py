@@ -21,6 +21,8 @@ class Gosec(BaseTool):
         results = data.get(cls.result_key, [])
         for entry in results:
             test_result = cls.result_class(**entry, cwd=cwd)
+            if test_result.severity.lower() not in cls.default_severities:
+                continue
             test_result.plugin_name = plugin_name
             test_result.file = test_result.file  # Ensure compatibility with create_output()
 
