@@ -1,5 +1,6 @@
 import json
 import logging
+import argparse
 import os
 import glob
 import inspect
@@ -67,66 +68,70 @@ TOOL_NAMES = {
     "eslint": "ESLint"
 }
 
-# Load results
-results = {
-    "bandit": load_json("bandit_output.json", "Bandit"),
-    "gosec": load_json("gosec_output.json", "Gosec"),
-    "trufflehog": load_json("trufflehog_output.json", "Trufflehog"),
-    "trivy_image": consolidate_trivy_results("trivy_image_*.json"),
-    "trivy_dockerfile": consolidate_trivy_results("trivy_dockerfile_*.json"),
-    "eslint": load_json("eslint_output.json", "ESLint")
-}
+def main():
+    # Load results
+    results = {
+        "bandit": load_json("bandit_output.json", "Bandit"),
+        "gosec": load_json("gosec_output.json", "Gosec"),
+        "trufflehog": load_json("trufflehog_output.json", "Trufflehog"),
+        "trivy_image": consolidate_trivy_results("trivy_image_*.json"),
+        "trivy_dockerfile": consolidate_trivy_results("trivy_dockerfile_*.json"),
+        "eslint": load_json("eslint_output.json", "ESLint")
+    }
 
-if any(results.values()):
-    if not SCM_DISABLED:
-        scm = SCM()
-        tool_outputs = {}
-        tool_events = {}
+    if any(results.values()):
+        if not SCM_DISABLED:
+            scm = SCM()
+            tool_outputs = {}
+            tool_events = {}
 
-        for key, data in results.items():
-            if data:
-                tool_marker = marker.replace("REPLACE_ME", TOOL_NAMES[key])
-                tool_class = TOOL_CLASSES[key]
-                if SEVERITIES:
-                    tool_class.default_severities = SEVERITIES
+            for key, data in results.items():
+                if data:
+                    tool_marker = marker.replace("REPLACE_ME", TOOL_NAMES[key])
+                    tool_class = TOOL_CLASSES[key]
+                    if SEVERITIES:
+                        tool_class.default_severities = SEVERITIES
 
-                supports_show_unverified = "show_unverified" in inspect.signature(tool_class.process_output).parameters
-                if supports_show_unverified:
-                    show_unverified = os.getenv("INPUT_TRUFFLEHOG_SHOW_UNVERIFIED", "false").lower() == "true"
-                    tool_outputs[key], tool_results = tool_class.create_output(
-                        data,
-                        tool_marker,
-                        scm.github.repo,
-                        scm.github.commit,
-                        scm.github.cwd,
-                        show_unverified=show_unverified
-                    )
-                else:
-                    tool_outputs[key], tool_results = tool_class.create_output(
-                        data, tool_marker, scm.github.repo, scm.github.commit, scm.github.cwd
-                    )
-                tool_events[key] = tool_outputs[key].get("events", [])
-                if tool_events[key]:
-                    scm.github.post_comment(TOOL_NAMES[key], tool_marker, tool_results)
+                    supports_show_unverified = "show_unverified" in inspect.signature(tool_class.process_output).parameters
+                    if supports_show_unverified:
+                        show_unverified = os.getenv("INPUT_TRUFFLEHOG_SHOW_UNVERIFIED", "false").lower() == "true"
+                        tool_outputs[key], tool_results = tool_class.create_output(
+                            data,
+                            tool_marker,
+                            scm.github.repo,
+                            scm.github.commit,
+                            scm.github.cwd,
+                            show_unverified=show_unverified
+                        )
+                    else:
+                        tool_outputs[key], tool_results = tool_class.create_output(
+                            data, tool_marker, scm.github.repo, scm.github.commit, scm.github.cwd
+                        )
+                    tool_events[key] = tool_outputs[key].get("events", [])
+                    if tool_events[key]:
+                        scm.github.post_comment(TOOL_NAMES[key], tool_marker, tool_results)
 
-        print("Issues detected with Security Tools. Please check PR comments")
+            print("Issues detected with Security Tools. Please check PR comments")
+        else:
+            tool_events = {
+                key: TOOL_CLASSES[key].process_output(data, GIT_DIR, TOOL_NAMES[key])
+                for key, data in results.items() if data
+            }
+
+        if sumo_client:
+            print("Issues detected with Security Tools. Please check Sumologic Events")
+            for key, events in tool_events.items():
+                print(errors) if (errors := sumo_client.send_events(events.get("events"), "../" + key + "_output.json")) else []
+
+        if ms_sentinel:
+            print("Issues detected with Security Tools. Please check Microsoft Sentinel Events")
+            for key, events in tool_events.items():
+                sentinel_name = f"SocketSecurityTools{TOOL_NAMES[key]}"
+                formatted_events = [json.dumps(event, default=lambda o: o.to_json()) for event in events.get("events", [])]
+                print(errors) if (errors := ms_sentinel.send_events(formatted_events, sentinel_name)) else []
+        exit(1)
     else:
-        tool_events = {
-            key: TOOL_CLASSES[key].process_output(data, GIT_DIR, TOOL_NAMES[key])
-            for key, data in results.items() if data
-        }
+        print("No issues detected with Socket Security Tools")
 
-    if sumo_client:
-        print("Issues detected with Security Tools. Please check Sumologic Events")
-        for key, events in tool_events.items():
-            print(errors) if (errors := sumo_client.send_events(events.get("events"), "../" + key + "_output.json")) else []
-
-    if ms_sentinel:
-        print("Issues detected with Security Tools. Please check Microsoft Sentinel Events")
-        for key, events in tool_events.items():
-            sentinel_name = f"SocketSecurityTools{TOOL_NAMES[key]}"
-            formatted_events = [json.dumps(event) for event in events.get("events", [])]
-            print(errors) if (errors := ms_sentinel.send_events(formatted_events, sentinel_name)) else []
-    exit(1)
-else:
-    print("No issues detected with Socket Security Tools")
+if __name__ == "__main__":
+    main()

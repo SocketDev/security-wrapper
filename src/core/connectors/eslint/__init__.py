@@ -103,6 +103,8 @@ class ESLint(BaseTool):
                     issue_text=issue_text,
                     cwd=cwd
                 )
+                if test_result.severity not in cls.default_severities:
+                    continue
                 test_result.plugin_name = plugin_name
                 test_name = cls.get_test_name(test_result)
                 test_result.use_custom = True

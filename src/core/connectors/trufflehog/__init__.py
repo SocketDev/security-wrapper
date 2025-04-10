@@ -30,7 +30,8 @@ class Trufflehog(BaseTool):
                     continue
 
                 test_result = cls.result_class(**entry, cwd=cwd)
-
+                if test_result.severity.lower() not in cls.default_severities:
+                    continue
                 test_result.plugin_name = plugin_name
                 test_result.file = entry.get("SourceMetadata", {}).get("Data", {}).get("Filesystem", {}).get("file", "")
                 test_result.file = test_result.file.replace(cwd, '').lstrip("/")

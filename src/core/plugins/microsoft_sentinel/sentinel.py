@@ -200,13 +200,18 @@ class Sentinel:
         """Detects event type and normalizes them for Sentinel ingestion."""
         formatted_events = []
 
-        for event in events:
-            if isinstance(event, str):
+        for event_details in events:
+            if type(event_details) == str:
                 try:
-                    event = json.loads(event)  # Convert from string if necessary
+                    event = json.loads(event_details)
+                    if type(event) == str:
+                        event = json.loads(event)
                 except json.JSONDecodeError:
-                    print(f"Skipping invalid event: {event}")
+                    print(f"Skipping invalid event: {event_details}")
                     continue  # Skip invalid JSON entries
+            else:
+                event = event_details
+
 
             if "plugin_name" in event:
                 if "bandit" in plugin_name.lower():
