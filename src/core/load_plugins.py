@@ -1,6 +1,7 @@
 import os
 from core.plugins.sumologic import Sumologic
 from core.plugins.microsoft_sentinel import Sentinel
+from core.plugins.console import Console
 
 
 def load_sumo_logic_plugin():
@@ -41,3 +42,18 @@ def load_ms_sentinel_plugin():
         return None
 
     return Sentinel(MS_SENTINEL_WORKSPACE_ID, MS_SENTINEL_SHARED_KEY)
+
+def load_console_plugin():
+    """
+    Loads the Microsoft Sentinel plugin if it is enabled and properly configured.
+
+    :return: Instance of the Microsoft Sentinel class or None if not enabled/configured.
+    """
+    console_enabled = os.getenv("INPUT_CONSOLE_ENABLED", "false").lower() == "true"
+    if not console_enabled:
+        print("Console Output integration is disabled.")
+        return None
+
+    SOCKET_CONSOLE_MODE = os.getenv("INPUT_SOCKET_CONSOLE_MODE", "console").lower()
+
+    return Console(mode=SOCKET_CONSOLE_MODE)

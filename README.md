@@ -61,11 +61,10 @@ jobs:
             security/detect-non-literal-regexp,
             security/detect-object-injection
 
-          # Log forwarding
+          # Log output
           sumo_logic_enabled: true
           sumo_logic_http_source_url: https://example/url
           ms_sentinel_enabled: true
           ms_sentinel_workspace_id: REPLACE_ME
           ms_sentinel_shared_key: REPLACE_ME
-
 ```
