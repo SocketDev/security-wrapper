@@ -150,6 +150,9 @@ class TrivyDockerfileTestResult(BaseTestResult):
 class TrivyImageTestResult(BaseTestResult):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.target = kwargs.get("Target", "")
+        self.Class = kwargs.get("Class", "")
+        self.Type = kwargs.get("Type", "")
         self.description = kwargs.get("Description", "")
         self.title = kwargs.get("Title", "")
         self.severity = kwargs.get("Severity", "UNKNOWN")
@@ -157,3 +160,42 @@ class TrivyImageTestResult(BaseTestResult):
         self.file = kwargs.get("File", "Unknown")
         self.url = kwargs.get("URL", "")
         self.issue_text = kwargs.get("IssueText", "")
+
+        # CVSS
+        self.cvss_nvd_v2_score = kwargs.get("CVSS", {}).get("nvd", {}).get("V2Score", None)
+        self.cvss_nvd_v2_vector = kwargs.get("CVSS", {}).get("nvd", {}).get("V2Vector", "")
+        self.cvss_nvd_v3_score = kwargs.get("CVSS", {}).get("nvd", {}).get("V3Score", None)
+        self.cvss_nvd_v3_vector = kwargs.get("CVSS", {}).get("nvd", {}).get("V3Vector", "")
+
+        # CWE and IDs
+        self.cwe_ids = kwargs.get("CweIDs", [])
+        self.vendor_ids = kwargs.get("VendorIDs", [])
+        self.vulnerability_id = kwargs.get("VulnerabilityID", "")
+        self.status = kwargs.get("Status", "")
+        self.severity_source = kwargs.get("SeveritySource", "")
+        self.vendor_severity = kwargs.get("VendorSeverity", {})
+
+        # Package data
+        self.pkg_id = kwargs.get("PkgID", "")
+        self.pkg_name = kwargs.get("PkgName", "")
+        self.pkg_identifier = kwargs.get("PkgIdentifier", {})
+        self.installed_version = kwargs.get("InstalledVersion", "")
+        self.fixed_version = kwargs.get("FixedVersion", "")
+
+        # Dates
+        self.published_date = kwargs.get("PublishedDate", "")
+        self.last_modified_date = kwargs.get("LastModifiedDate", "")
+
+        # References
+        self.references = kwargs.get("References", [])
+        self.primary_url = kwargs.get("PrimaryURL", "")
+
+        # Layer metadata
+        self.layer_digest = kwargs.get("Layer", {}).get("Digest", "")
+        self.layer_diff_id = kwargs.get("Layer", {}).get("DiffID", "")
+
+        # Data source
+        data_source = kwargs.get("DataSource", {})
+        self.data_source_id = data_source.get("ID", "")
+        self.data_source_name = data_source.get("Name", "")
+        self.data_source_url = data_source.get("URL", "")

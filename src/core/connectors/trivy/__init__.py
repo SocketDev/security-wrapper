@@ -19,6 +19,7 @@ class TrivyImage(BaseTool):
                 continue  # No vulnerabilities, so no events
             item_type = result.get("Type", "Unknown")
             item_class = result.get("Class", "Unknown")
+            item_target = result.get("Target", "Unknown")
             item_key = f"{item_class}_{item_type}"
             vuln_results = {}
             if item_key not in grouped_vulnerabilities:
@@ -43,6 +44,11 @@ class TrivyImage(BaseTool):
                     ]
                 else:
                     vuln_results[package][severity].append(cve_title)
+                output_result = cls.result_class(**vuln)
+                output_result.Class = item_class
+                output_result.Type = item_type
+                output_result.Target = item_target
+                metrics["output"].append(output_result)
             grouped_vulnerabilities[item_key].update(vuln_results)
         results = []
         for description in grouped_vulnerabilities:
@@ -68,7 +74,7 @@ class TrivyImage(BaseTool):
         test_result.plugin_name = plugin_name
         cls.extract_additional_data(test_result, cwd)
         metrics["events"].append(test_result)
-        metrics["output"].append(test_result)
+        # metrics["output"].append(test_result)
         return metrics
 
     @staticmethod
