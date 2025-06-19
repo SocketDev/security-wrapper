@@ -173,6 +173,77 @@ if [[ "$INPUT_SECRET_SCANNING_ENABLED" == "true" ]]; then
     eval $trufflehog_cmd || :
 fi
 
+# New logic for file selection and language detection
+scan_files=()
+
+# If INPUT_SCAN_ALL is true, always scan the whole directory
+if [[ "$INPUT_SCAN_ALL" == "true" ]]; then
+  mapfile -t scan_files < <(find . -type f \( -name '*.py' -o -name '*.go' -o -name '*.js' -o -name '*.jsx' -o -name '*.ts' -o -name '*.tsx' \))
+# Accept a comma-separated list of files to scan via INPUT_SCAN_FILES
+elif [[ -n "$INPUT_SCAN_FILES" ]]; then
+  IFS=',' read -ra scan_files <<< "$INPUT_SCAN_FILES"
+else
+  # If .git exists, get changed files from the latest commit
+  if [[ -d .git ]]; then
+    mapfile -t scan_files < <(git diff --name-only HEAD~1 HEAD)
+  else
+    # Otherwise, scan all files in the workspace
+    mapfile -t scan_files < <(find . -type f \( -name '*.py' -o -name '*.go' -o -name '*.js' -o -name '*.jsx' -o -name '*.ts' -o -name '*.tsx' \))
+  fi
+fi
+
+# Separate files by language
+python_files=()
+go_files=()
+js_files=()
+for file in "${scan_files[@]}"; do
+  case "$file" in
+    *.py) python_files+=("$file") ;;
+    *.go) go_files+=("$file") ;;
+    *.js|*.jsx|*.ts|*.tsx) js_files+=("$file") ;;
+  esac
+done
+
+# Run Bandit on Python files
+if [[ "${#python_files[@]}" -gt 0 && "$INPUT_PYTHON_SAST_ENABLED" == "true" ]]; then
+  echo "Running Bandit on Python files: ${python_files[*]}"
+  bandit_cmd="bandit -f json -o /tmp/bandit_output.json ${python_files[*]}"
+  if [[ -n "$BANDIT_EXCLUDE_DIR" ]]; then
+    bandit_cmd+=" --exclude $BANDIT_EXCLUDE_DIR"
+  fi
+  if [[ -n "$BANDIT_RULES" ]]; then
+    bandit_cmd+=" --skip $BANDIT_RULES"
+  fi
+  echo $bandit_cmd
+  eval $bandit_cmd || :
+fi
+
+# Run Gosec on Go files
+if [[ "${#go_files[@]}" -gt 0 && "$INPUT_GOLANG_SAST_ENABLED" == "true" ]]; then
+  echo "Running Gosec on Go files: ${go_files[*]}"
+  gosec_cmd="gosec -fmt json -out /tmp/gosec_output.json ${go_files[*]}"
+  if [[ -n "$GOSEC_EXCLUDE_DIR" ]]; then
+    gosec_cmd+=" -exclude-dir=$GOSEC_EXCLUDE_DIR"
+  fi
+  if [[ -n "$GOSEC_RULES" ]]; then
+    gosec_cmd+=" -severity=$GOSEC_RULES"
+  fi
+  eval $gosec_cmd || :
+fi
+
+# Run ESLint on JS/TS files
+if [[ "${#js_files[@]}" -gt 0 && "${INPUT_JAVASCRIPT_SAST_ENABLED:-false}" == "true" ]]; then
+  echo "Running ESLint on JS/TS files: ${js_files[*]}"
+  eslint_cmd="npx --yes eslint --config $WORKSPACE/eslint.config.mjs ${js_files[*]} --ext .js,.jsx,.ts,.tsx --format json --output-file $OUTPUT_DIR/eslint_output.json"
+  if [[ -n "$ESLINT_EXCLUDE_DIR" ]]; then
+    IFS=',' read -ra EXCLUDES <<< "$ESLINT_EXCLUDE_DIR"
+    for exclude in "${EXCLUDES[@]}"; do
+      eslint_cmd+=" --ignore-pattern $exclude"
+    done
+  fi
+  eval $eslint_cmd || :
+fi
+
 # Execute the custom Python script to process findings
 if [ "$LOCAL_TESTING" != "true" ]; then
   cd /

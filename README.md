@@ -67,4 +67,8 @@ jobs:
           ms_sentinel_enabled: true
           ms_sentinel_workspace_id: REPLACE_ME
           ms_sentinel_shared_key: REPLACE_ME
+
+          # Scan scope settings
+          scan_all: false   # Set to true to always scan the whole directory
+          scan_files: ""    # Comma-separated list of files to scan (overrides git diff)
 ```
