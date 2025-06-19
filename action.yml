@@ -129,6 +129,16 @@ inputs:
     required: false
     default: "REPLACE_ME"
 
+  # Scan Scope Configuration
+  scan_all:
+    description: "If true, always scan the whole directory regardless of git or file list."
+    required: false
+    default: "false"
+  scan_files:
+    description: "Comma-separated list of files to scan. If not set, will use git diff or scan all."
+    required: false
+    default: ""
+
 branding:
   icon: "shield"
   color: "blue"

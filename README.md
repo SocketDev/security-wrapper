@@ -61,11 +61,58 @@ jobs:
             security/detect-non-literal-regexp,
             security/detect-object-injection
 
-          # Log forwarding
+          # Log output
           sumo_logic_enabled: true
           sumo_logic_http_source_url: https://example/url
           ms_sentinel_enabled: true
           ms_sentinel_workspace_id: REPLACE_ME
           ms_sentinel_shared_key: REPLACE_ME
 
+          # Scan scope settings
+          scan_all: false   # Set to true to always scan the whole directory
+          scan_files: ""    # Comma-separated list of files to scan (overrides git diff)
 ```
+
+## Local Development & Testing
+
+You can run the security-wrapper locally using Docker. This is useful for testing changes or scanning code outside of GitHub Actions.
+
+### Build the Docker Image
+
+```sh
+git clone git@github.com:SocketDev/security-wrapper.git
+
+# Build the Docker image
+docker build -t socketdev/security-wrapper .
+```
+
+### Run the Security Wrapper Locally
+
+```sh
+docker run --rm --name security-wrapper \
+  -v "$PWD:/code" \
+  -e "GIT_REPO=socketdev-demo/sast-testing" \
+  -e "GITHUB_REPOSITORY=socketdev-demo/sast-testing" \
+  -e "GITHUB_WORKSPACE=/code" \
+  -e "INPUT_CONSOLE_ENABLED=true" \
+  # Uncomment and set if you want to scan images (requires Docker-in-Docker)
+  # -e "INPUT_DOCKER_IMAGES=trickyhu/sigsci-rule-editor:latest,socketdev/cli:latest" \
+  -e "INPUT_DOCKERFILE_ENABLED=true" \
+  -e "INPUT_DOCKERFILES=Dockerfile,Dockerfile.sigsci" \
+  -e "INPUT_ESLINT_SAST_ENABLED=true" \
+  -e "INPUT_FINDING_SEVERITIES=critical" \
+  -e "INPUT_GOSEC_SAST_ENABLED=true" \
+  -e "INPUT_IMAGE_ENABLED=true" \
+  -e "INPUT_PYTHON_SAST_ENABLED=true" \
+  -e "PYTHONUNBUFFERED=1" \
+  -e "INPUT_SECRET_SCANNING_ENABLED=true" \
+  -e "SOCKET_SCM_DISABLED=true" \
+  -e "INPUT_SOCKET_CONSOLE_MODE=json" \
+  socketdev/security-wrapper
+```
+
+**Notes:**
+- You can adjust the environment variables to enable/disable specific scanners.
+- For image scanning, Docker-in-Docker must be enabled, and you may need to add a `docker pull` step before running.
+- Results will be printed to the console or output as JSON, depending on `INPUT_SOCKET_CONSOLE_MODE`.
+- You can also run the wrapper directly with Bash and Python for rapid local development (see `entrypoint.sh`).

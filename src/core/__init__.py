@@ -55,9 +55,7 @@ class BaseTool:
         """Override in subclasses to define test name structure."""
         return "test_result"
 
-    @classmethod
     def create_output(
-        cls, data: dict, marker: str, repo: str, commit: str, cwd: str, show_unverified=None
     ) -> (Union[str, None], dict):
         """Formats output as properly structured Markdown."""
 
