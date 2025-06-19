@@ -109,7 +109,7 @@ def main():
 
     if any(results.values()):
         if not SCM_DISABLED:
-            scm = SCM()
+            scm = SCM() # type: ignore
             tool_outputs = {}
             tool_events = {}
 
