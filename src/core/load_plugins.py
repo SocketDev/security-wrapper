@@ -12,7 +12,7 @@ def load_sumo_logic_plugin():
     """
     sumo_logic_enabled = os.getenv("INPUT_SUMO_LOGIC_ENABLED", "false").lower() == "true"
     if not sumo_logic_enabled:
-        print("Sumo Logic integration is disabled.")
+        # print("Sumo Logic integration is disabled.")
         return None
 
     sumo_logic_http_source_url = os.getenv("INPUT_SUMO_LOGIC_HTTP_SOURCE_URL")
@@ -31,7 +31,7 @@ def load_ms_sentinel_plugin():
     """
     ms_sentinel_enabled = os.getenv("INPUT_MS_SENTINEL_ENABLED", "false").lower() == "true"
     if not ms_sentinel_enabled:
-        print("Microsoft Sentinel integration is disabled.")
+        # print("Microsoft Sentinel integration is disabled.")
         return None
 
     MS_SENTINEL_WORKSPACE_ID = os.getenv("INPUT_MS_SENTINEL_WORKSPACE_ID")

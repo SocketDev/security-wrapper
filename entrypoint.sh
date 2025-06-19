@@ -212,4 +212,17 @@ if [ "$LOCAL_TESTING" != "true" ]; then
   cd "$WORKSPACE"
 fi
 # Run the Python script from the correct directory and path
-python "$WORKSPACE/src/socket_external_tools_runner.py"
+if [[ -n "$PY_SCRIPT_PATH" ]]; then
+  FINAL_PY_SCRIPT_PATH="$PY_SCRIPT_PATH"
+elif [[ "$DEV_MODE" == "true" ]]; then
+  FINAL_PY_SCRIPT_PATH="$WORKSPACE/src/socket_external_tools_runner.py"
+else
+  FINAL_PY_SCRIPT_PATH="$WORKSPACE/socket_external_tools_runner.py"
+fi
+
+if [[ -f "$FINAL_PY_SCRIPT_PATH" ]]; then
+  python "$FINAL_PY_SCRIPT_PATH"
+else
+  echo "Error: Python script not found at $FINAL_PY_SCRIPT_PATH" >&2
+  exit 1
+fi

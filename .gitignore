@@ -22,3 +22,4 @@ test.py
 file_generator.py
 .env
 *.md
+test_results

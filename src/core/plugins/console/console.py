@@ -155,9 +155,9 @@ class Console:
         :param output_type: 'console', 'markdown', or 'json'
         :return: Formatted string (markdown/console) or JSON array (str)
         """
-        msg = f"No events to process for {plugin} plugin. Skipping output."
+        # msg = f"No events to process for {plugin} plugin. Skipping output."
         if not events or len(events) == 0:
-            print(msg)
+            # print(msg)
             return
 
         normalized = Console.normalize_events(events, plugin)

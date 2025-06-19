@@ -21,11 +21,13 @@ if not SCM_DISABLED:
 else:
     SCM = None
 GIT_DIR = os.getenv("GITHUB_REPOSITORY", None)
-SEVERITIES= os.getenv("INPUT_FINDING_SEVERITIES")
+SEVERITIES = os.getenv("INPUT_FINDING_SEVERITIES")
 if SEVERITIES is not None:
     SEVERITIES = set(SEVERITIES.split(","))
-if not GIT_DIR and SCM_DISABLED:
-    print("GIT_DIR is not set and is required if SCM_DISABLED=true")
+else:
+    SEVERITIES = {"CRITICAL"}
+if not GIT_DIR and not SCM_DISABLED:
+    print("GIT_DIR is not set and is required unless SCM_DISABLED=true")
     exit(1)
 
 def print_tool_events_summary(tool_events):
@@ -77,49 +79,66 @@ sumo_client = load_sumo_logic_plugin()
 ms_sentinel = load_ms_sentinel_plugin()
 console_output = load_console_plugin()
 
-# Define tool names
-TOOL_CLASSES = {
-    "bandit": Bandit,
-    "gosec": Gosec,
-    "trufflehog": Trufflehog,
-    "trivy_image": TrivyImage,
-    "trivy_dockerfile": TrivyDockerfile,
-    "eslint": ESLint
-}
-
-TOOL_NAMES = {
-    "bandit": "Bandit",
-    "gosec": "Gosec",
-    "trufflehog": "Trufflehog",
-    "trivy_image": "TrivyImageScanning",
-    "trivy_dockerfile": "TrivyDockerfileScanning",
-    "eslint": "ESLint"
-}
+# Dynamically build tool classes and names based on enabled inputs
+TOOL_CLASSES = {}
+TOOL_NAMES = {}
+if os.getenv("INPUT_PYTHON_SAST_ENABLED", "false").lower() == "true":
+    TOOL_CLASSES["bandit"] = Bandit
+    TOOL_NAMES["bandit"] = "Bandit"
+if os.getenv("INPUT_GOLANG_SAST_ENABLED", "false").lower() == "true":
+    TOOL_CLASSES["gosec"] = Gosec
+    TOOL_NAMES["gosec"] = "Gosec"
+if os.getenv("INPUT_SECRET_SCANNING_ENABLED", "false").lower() == "true":
+    TOOL_CLASSES["trufflehog"] = Trufflehog
+    TOOL_NAMES["trufflehog"] = "Trufflehog"
+if os.getenv("INPUT_TRIVY_IMAGE_ENABLED", "false").lower() == "true":
+    TOOL_CLASSES["trivy_image"] = TrivyImage
+    TOOL_NAMES["trivy_image"] = "TrivyImageScanning"
+if os.getenv("INPUT_TRIVY_DOCKERFILE_ENABLED", "false").lower() == "true":
+    TOOL_CLASSES["trivy_dockerfile"] = TrivyDockerfile
+    TOOL_NAMES["trivy_dockerfile"] = "TrivyDockerfileScanning"
+if os.getenv("INPUT_JAVASCRIPT_SAST_ENABLED", "false").lower() == "true":
+    TOOL_CLASSES["eslint"] = ESLint
+    TOOL_NAMES["eslint"] = "ESLint"
 
 def main():
-    # Load results
-    results = {
-        "bandit": load_json("bandit_output.json", "Bandit"),
-        "gosec": load_json("gosec_output.json", "Gosec"),
-        "trufflehog": load_json("trufflehog_output.json", "Trufflehog"),
-        "trivy_image": consolidate_trivy_results("trivy_image_*.json"),
-        "trivy_dockerfile": consolidate_trivy_results("trivy_dockerfile_*.json"),
-        "eslint": load_json("eslint_output.json", "ESLint")
-    }
+    # Load results only for enabled tools
+    results = {}
+    if "bandit" in TOOL_CLASSES:
+        bandit_data = load_json("bandit_output.json", "Bandit")
+        if bandit_data:
+            results["bandit"] = bandit_data
+    if "gosec" in TOOL_CLASSES:
+        gosec_data = load_json("gosec_output.json", "Gosec")
+        if gosec_data:
+            results["gosec"] = gosec_data
+    if "trufflehog" in TOOL_CLASSES:
+        trufflehog_data = load_json("trufflehog_output.json", "Trufflehog")
+        if trufflehog_data:
+            results["trufflehog"] = trufflehog_data
+    if "trivy_image" in TOOL_CLASSES:
+        trivy_image_data = consolidate_trivy_results("trivy_image_*.json")
+        if trivy_image_data and trivy_image_data.get("Results"):
+            results["trivy_image"] = trivy_image_data
+    if "trivy_dockerfile" in TOOL_CLASSES:
+        trivy_dockerfile_data = consolidate_trivy_results("trivy_dockerfile_*.json")
+        if trivy_dockerfile_data and trivy_dockerfile_data.get("Results"):
+            results["trivy_dockerfile"] = trivy_dockerfile_data
+    if "eslint" in TOOL_CLASSES:
+        eslint_data = load_json("eslint_output.json", "ESLint")
+        if eslint_data:
+            results["eslint"] = eslint_data
 
     if any(results.values()):
         if not SCM_DISABLED:
             scm = SCM() # type: ignore
             tool_outputs = {}
             tool_events = {}
-
             for key, data in results.items():
                 if data:
                     tool_marker = marker.replace("REPLACE_ME", TOOL_NAMES[key])
                     tool_class = TOOL_CLASSES[key]
-                    if SEVERITIES:
-                        tool_class.default_severities = SEVERITIES
-
+                    tool_class.default_severities = SEVERITIES
                     supports_show_unverified = "show_unverified" in inspect.signature(tool_class.process_output).parameters
                     if supports_show_unverified:
                         show_unverified = os.getenv("INPUT_TRUFFLEHOG_SHOW_UNVERIFIED", "false").lower() == "true"
@@ -138,23 +157,26 @@ def main():
                     tool_events[key] = tool_outputs[key].get("events", [])
                     if tool_events[key]:
                         scm.github.post_comment(TOOL_NAMES[key], tool_marker, tool_results)
-
             print("Issues detected with Security Tools. Please check PR comments")
         else:
             tool_events = {}
+            cwd = GIT_DIR if GIT_DIR else os.getcwd()
             for key, data in results.items():
                 if key not in TOOL_CLASSES or not data:
                     continue
                 TOOL_CLASSES[key].default_severities = SEVERITIES
-                tool_events[key] = TOOL_CLASSES[key].process_output(data, GIT_DIR, TOOL_NAMES[key])
+                tool_events[key] = TOOL_CLASSES[key].process_output(data, cwd, TOOL_NAMES[key])
 
         if len(tool_events) > 0:
-            if sumo_client:
-                print("Issues detected with Security Tools. Please check Sumologic Events")
-            if ms_sentinel:
-                print("Issues detected with Security Tools. Please check Microsoft Sentinel Events")
-            if console_output:
-                print("Issues detected with Security Tools.")
+            # Only show integration messages if there is at least one event
+            total_events = sum(len(events.get("events", [])) for events in tool_events.values())
+            if total_events > 0:
+                if sumo_client:
+                    print("Issues detected with Security Tools. Please check Sumologic Events")
+                if ms_sentinel:
+                    print("Issues detected with Security Tools. Please check Microsoft Sentinel Events")
+                if console_output:
+                    print("Issues detected with Security Tools.")
 
         for key, events in tool_events.items():
             tool_name = f"SocketSecurityTools-{TOOL_NAMES[key]}"
