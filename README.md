@@ -81,7 +81,6 @@ You can run the security-wrapper locally using Docker. This is useful for testin
 
 ```sh
 git clone git@github.com:SocketDev/security-wrapper.git
-git checkout <your-branch>
 
 # Build the Docker image
 docker build -t socketdev/security-wrapper .
