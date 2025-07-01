@@ -9,7 +9,7 @@ log.addHandler(logging.NullHandler())
 
 __all__ = ["marker", "__version__", "__author__", "log", "base_github"]
 
-__version__ = "1.0.16"
+__version__ = "1.0.18"
 __author__ = "socket.dev"
 base_github = "https://github.com"
 
