@@ -34,6 +34,10 @@ RUN apt-get update && apt-get install -y curl && \
     apt-get install -y nodejs && \
     npm install -g eslint eslint-plugin-security @typescript-eslint/parser @typescript-eslint/eslint-plugin
 
+# Install Socket CLI tools
+RUN npm install -g socket
+RUN uv tool install socketsecurity
+
 # Copy the entrypoint script and make it executable
 RUN chmod +x /entrypoint.sh
 
