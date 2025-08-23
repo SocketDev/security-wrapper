@@ -3,6 +3,7 @@ import logging
 import os
 import glob
 import inspect
+from version import __version__
 from core import marker
 from core.connectors.bandit import Bandit
 from core.connectors.gosec import Gosec

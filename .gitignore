@@ -18,6 +18,9 @@ markdown_security_temp.md
 .DS_Store
 *.pyc
 test.py
+
+# Note: requirements.txt is no longer needed - using pyproject.toml + uv.lock instead
+# Version files are auto-managed by .hooks/version-check.py
 *.cpython-312.pyc`
 file_generator.py
 .env
