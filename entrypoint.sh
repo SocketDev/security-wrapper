@@ -315,6 +315,33 @@ fi
 if [ "$LOCAL_TESTING" != "true" ]; then
   cd "$WORKSPACE"
 fi
+
+# Consolidate all security tool results into .socket.facts.json format
+echo "Consolidating security tool results into .socket.facts.json format"
+if [[ "$DEV_MODE" == "true" ]]; then
+  CONSOLIDATOR_SCRIPT_PATH="$WORKSPACE/src/core/socket_facts_consolidator.py"
+else
+  CONSOLIDATOR_SCRIPT_PATH="$WORKSPACE/socket_facts_consolidator.py"
+fi
+
+# Consolidate all security tool results into .socket.facts.json format
+echo "Consolidating security tool results into .socket.facts.json format"
+if [[ "$DEV_MODE" == "true" ]]; then
+  CONSOLIDATOR_SCRIPT_DIR="$WORKSPACE/src"
+else
+  CONSOLIDATOR_SCRIPT_DIR="$WORKSPACE"
+fi
+
+python -c "
+import sys
+import os
+sys.path.insert(0, '$CONSOLIDATOR_SCRIPT_DIR')
+from core.socket_facts_consolidator import SocketFactsConsolidator
+consolidator = SocketFactsConsolidator('$GITHUB_WORKSPACE')
+consolidator.save_consolidated_facts('$GITHUB_WORKSPACE/.socket.facts.json')
+print('Successfully consolidated security tool results into .socket.facts.json')
+" || echo "Warning: Could not consolidate results, continuing with individual tool processing"
+
 # Run the Python script from the correct directory and path
 if [[ -n "$PY_SCRIPT_PATH" ]]; then
   FINAL_PY_SCRIPT_PATH="$PY_SCRIPT_PATH"

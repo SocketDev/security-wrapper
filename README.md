@@ -2,6 +2,17 @@
 
 The purpose of this action is to run various security tools, process their output, and then comment the results on a PR. It is expected to only run this on PRs.
 
+## New: Consolidated Socket Facts Format
+
+Starting with version 2.0.0, all security tool results are consolidated into a unified `.socket.facts.json` format. This provides:
+
+- **Unified Processing**: All security findings in a single, consistent format
+- **Enhanced Integration**: Easier integration with Socket's dependency analysis
+- **Custom Components**: Support for organization-specific component types
+- **Backward Compatibility**: Existing workflows continue to work unchanged
+
+The consolidated format extends Socket's dependency data with external security findings from SAST scanners, secret scanners, and container scanners.
+
 ## Supported Security Tools
 
 - **Bandit** - Python SAST analysis

@@ -11,6 +11,7 @@ from core.connectors.trivy import TrivyImage, TrivyDockerfile
 from core.connectors.eslint import ESLint
 from core.connectors.socket import Socket
 from core.connectors.socket_sca import SocketSCA
+from core.socket_facts_processor import SocketFactsProcessor
 from core.load_plugins import load_sumo_logic_plugin, load_ms_sentinel_plugin, load_console_plugin
 from tabulate import tabulate
 
@@ -117,40 +118,99 @@ def main():
         """Get the full path to an output file based on TEMP_OUTPUT_DIR"""
         return os.path.join(temp_output_dir, filename)
     
-    # Load results only for enabled tools
-    results = {}
-    if "bandit" in TOOL_CLASSES:
-        bandit_data = load_json(get_output_file_path("bandit_output.json"), "Bandit")
-        if bandit_data:
-            results["bandit"] = bandit_data
-    if "gosec" in TOOL_CLASSES:
-        gosec_data = load_json(get_output_file_path("gosec_output.json"), "Gosec")
-        if gosec_data:
-            results["gosec"] = gosec_data
-    if "trufflehog" in TOOL_CLASSES:
-        trufflehog_data = load_json(get_output_file_path("trufflehog_output.json"), "Trufflehog")
-        if trufflehog_data:
-            results["trufflehog"] = trufflehog_data
-    if "trivy_image" in TOOL_CLASSES:
-        trivy_image_data = consolidate_trivy_results(get_output_file_path("trivy_image_*.json"))
-        if trivy_image_data and trivy_image_data.get("Results"):
-            results["trivy_image"] = trivy_image_data
-    if "trivy_dockerfile" in TOOL_CLASSES:
-        trivy_dockerfile_data = consolidate_trivy_results(get_output_file_path("trivy_dockerfile_*.json"))
-        if trivy_dockerfile_data and trivy_dockerfile_data.get("Results"):
-            results["trivy_dockerfile"] = trivy_dockerfile_data
-    if "eslint" in TOOL_CLASSES:
-        eslint_data = load_json(get_output_file_path("eslint_output.json"), "ESLint")
-        if eslint_data:
-            results["eslint"] = eslint_data
-    if "socket" in TOOL_CLASSES:
-        socket_data = load_json(".socket.facts.json", "Socket")
-        if socket_data:
-            results["socket"] = socket_data
-    if "socket_sca" in TOOL_CLASSES:
-        socket_sca_data = load_json(get_output_file_path("socket_sca_output.json"), "SocketSCA")
-        if socket_sca_data:
-            results["socket_sca"] = socket_sca_data
+    # Check if we have a consolidated .socket.facts.json file
+    socket_facts_path = ".socket.facts.json"
+    if os.path.exists(socket_facts_path):
+        print("Using consolidated .socket.facts.json format")
+        
+        # Initialize facts processor
+        facts_processor = SocketFactsProcessor()
+        facts_processor.default_severities = SEVERITIES
+        facts_data = facts_processor.load_socket_facts(socket_facts_path)
+        
+        # Process results from consolidated facts
+        results = {}
+        
+        # Process Socket dependency data (original socket facts)
+        socket_components = [c for c in facts_data.get("components", []) if c.get("type") in ["npm", "pypi", "go", "maven", "nuget"]]
+        if socket_components:
+            # Create a socket facts data structure with only dependency components
+            socket_data = {"components": socket_components}
+            if socket_data:
+                results["socket"] = socket_data
+        
+        # Process external security tool alerts from facts
+        if "bandit" in TOOL_CLASSES:
+            bandit_metrics = facts_processor.process_sast_alerts(facts_data, "python", os.getcwd(), "Bandit")
+            if bandit_metrics.get("output"):
+                results["bandit"] = bandit_metrics
+        
+        if "gosec" in TOOL_CLASSES:
+            gosec_metrics = facts_processor.process_sast_alerts(facts_data, "golang", os.getcwd(), "Gosec")
+            if gosec_metrics.get("output"):
+                results["gosec"] = gosec_metrics
+        
+        if "eslint" in TOOL_CLASSES:
+            eslint_metrics = facts_processor.process_sast_alerts(facts_data, "javascript", os.getcwd(), "ESLint")
+            if eslint_metrics.get("output"):
+                results["eslint"] = eslint_metrics
+        
+        if "trufflehog" in TOOL_CLASSES:
+            trufflehog_metrics = facts_processor.process_secret_alerts(facts_data, os.getcwd(), "Trufflehog")
+            if trufflehog_metrics.get("output"):
+                results["trufflehog"] = trufflehog_metrics
+        
+        if "trivy_image" in TOOL_CLASSES:
+            trivy_image_metrics = facts_processor.process_container_alerts(facts_data, "image", os.getcwd(), "TrivyImageScanning")
+            if trivy_image_metrics.get("output"):
+                results["trivy_image"] = trivy_image_metrics
+        
+        if "trivy_dockerfile" in TOOL_CLASSES:
+            trivy_dockerfile_metrics = facts_processor.process_container_alerts(facts_data, "dockerfile", os.getcwd(), "TrivyDockerfileScanning")
+            if trivy_dockerfile_metrics.get("output"):
+                results["trivy_dockerfile"] = trivy_dockerfile_metrics
+        
+        if "socket_sca" in TOOL_CLASSES:
+            socket_sca_metrics = facts_processor.process_socket_sca_alerts(facts_data, os.getcwd(), "SocketSCA")
+            if socket_sca_metrics.get("output") or socket_sca_metrics.get("scan_failed"):
+                results["socket_sca"] = socket_sca_metrics
+        
+    else:
+        print("Using legacy individual tool output format")
+        # Fallback to legacy processing if no consolidated facts file
+        results = {}
+        if "bandit" in TOOL_CLASSES:
+            bandit_data = load_json(get_output_file_path("bandit_output.json"), "Bandit")
+            if bandit_data:
+                results["bandit"] = bandit_data
+        if "gosec" in TOOL_CLASSES:
+            gosec_data = load_json(get_output_file_path("gosec_output.json"), "Gosec")
+            if gosec_data:
+                results["gosec"] = gosec_data
+        if "trufflehog" in TOOL_CLASSES:
+            trufflehog_data = load_json(get_output_file_path("trufflehog_output.json"), "Trufflehog")
+            if trufflehog_data:
+                results["trufflehog"] = trufflehog_data
+        if "trivy_image" in TOOL_CLASSES:
+            trivy_image_data = consolidate_trivy_results(get_output_file_path("trivy_image_*.json"))
+            if trivy_image_data and trivy_image_data.get("Results"):
+                results["trivy_image"] = trivy_image_data
+        if "trivy_dockerfile" in TOOL_CLASSES:
+            trivy_dockerfile_data = consolidate_trivy_results(get_output_file_path("trivy_dockerfile_*.json"))
+            if trivy_dockerfile_data and trivy_dockerfile_data.get("Results"):
+                results["trivy_dockerfile"] = trivy_dockerfile_data
+        if "eslint" in TOOL_CLASSES:
+            eslint_data = load_json(get_output_file_path("eslint_output.json"), "ESLint")
+            if eslint_data:
+                results["eslint"] = eslint_data
+        if "socket" in TOOL_CLASSES:
+            socket_data = load_json(".socket.facts.json", "Socket")
+            if socket_data:
+                results["socket"] = socket_data
+        if "socket_sca" in TOOL_CLASSES:
+            socket_sca_data = load_json(get_output_file_path("socket_sca_output.json"), "SocketSCA")
+            if socket_sca_data:
+                results["socket_sca"] = socket_sca_data
 
     if any(results.values()):
         if not SCM_DISABLED:
@@ -162,21 +222,50 @@ def main():
                     tool_marker = marker.replace("REPLACE_ME", TOOL_NAMES[key])
                     tool_class = TOOL_CLASSES[key]
                     tool_class.default_severities = SEVERITIES
-                    supports_show_unverified = "show_unverified" in inspect.signature(tool_class.process_output).parameters
-                    if supports_show_unverified:
-                        show_unverified = os.getenv("INPUT_TRUFFLEHOG_SHOW_UNVERIFIED", "false").lower() == "true"
-                        tool_outputs[key], tool_results = tool_class.create_output(
-                            data,
-                            tool_marker,
-                            scm.github.repo,
-                            scm.github.commit,
-                            scm.github.cwd,
-                            show_unverified=show_unverified
-                        )
+                    
+                    # Handle consolidated facts vs legacy data differently
+                    if key == "socket" and "components" in data:
+                        # For socket dependency data, use the original create_output method
+                        supports_show_unverified = "show_unverified" in inspect.signature(tool_class.process_output).parameters
+                        if supports_show_unverified:
+                            show_unverified = os.getenv("INPUT_TRUFFLEHOG_SHOW_UNVERIFIED", "false").lower() == "true"
+                            tool_outputs[key], tool_results = tool_class.create_output(
+                                data,
+                                tool_marker,
+                                scm.github.repo,
+                                scm.github.commit,
+                                scm.github.cwd,
+                                show_unverified=show_unverified
+                            )
+                        else:
+                            tool_outputs[key], tool_results = tool_class.create_output(
+                                data, tool_marker, scm.github.repo, scm.github.commit, scm.github.cwd
+                            )
+                    elif isinstance(data, dict) and "output" in data:
+                        # For consolidated security tool data, create output from processed alerts
+                        tool_outputs[key] = {
+                            "events": data.get("output", []),
+                            "output": [str(alert) for alert in data.get("output", [])]
+                        }
+                        tool_results = "\n".join(tool_outputs[key]["output"])
                     else:
-                        tool_outputs[key], tool_results = tool_class.create_output(
-                            data, tool_marker, scm.github.repo, scm.github.commit, scm.github.cwd
-                        )
+                        # Legacy processing for individual tool outputs
+                        supports_show_unverified = "show_unverified" in inspect.signature(tool_class.process_output).parameters
+                        if supports_show_unverified:
+                            show_unverified = os.getenv("INPUT_TRUFFLEHOG_SHOW_UNVERIFIED", "false").lower() == "true"
+                            tool_outputs[key], tool_results = tool_class.create_output(
+                                data,
+                                tool_marker,
+                                scm.github.repo,
+                                scm.github.commit,
+                                scm.github.cwd,
+                                show_unverified=show_unverified
+                            )
+                        else:
+                            tool_outputs[key], tool_results = tool_class.create_output(
+                                data, tool_marker, scm.github.repo, scm.github.commit, scm.github.cwd
+                            )
+                    
                     tool_events[key] = tool_outputs[key].get("events", [])
                     if tool_events[key]:
                         scm.github.post_comment(TOOL_NAMES[key], tool_marker, tool_results)
@@ -188,7 +277,14 @@ def main():
                 if key not in TOOL_CLASSES or not data:
                     continue
                 TOOL_CLASSES[key].default_severities = SEVERITIES
-                tool_events[key] = TOOL_CLASSES[key].process_output(data, cwd, TOOL_NAMES[key])
+                
+                # Handle consolidated facts vs legacy data differently
+                if isinstance(data, dict) and "output" in data:
+                    # For consolidated security tool data, we already have processed events
+                    tool_events[key] = {"events": data.get("output", [])}
+                else:
+                    # Legacy processing for individual tool outputs
+                    tool_events[key] = TOOL_CLASSES[key].process_output(data, cwd, TOOL_NAMES[key])
 
         # Check for scan failures that should force an exit regardless of other conditions
         scan_failed = False
