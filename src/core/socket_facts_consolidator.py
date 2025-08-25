@@ -7,13 +7,47 @@ tool results to be processed consistently by the runner.
 
 The format follows the Socket Facts schema with an "alerts" extension for non-package 
 security findings like SAST issues, secrets, and container vulnerabilities.
+
+Git Repository Information:
+The consolidator automatically adds repository information to the facts file including:
+- repository: The repository name
+- branch: The current branch or "detached-head" for CI environments
+- scan_timestamp: ISO 8601 timestamp of when the scan was performed
+
+Environment Variable Overrides:
+- SOCKET_REPOSITORY_NAME or GITHUB_REPOSITORY: Override repository name
+- SOCKET_BRANCH_NAME, GITHUB_REF_NAME, GITHUB_HEAD_REF: Override branch name
+
+S3 Storage Support:
+Optional S3-compatible storage for facts files with change detection:
+- SOCKET_S3_ENABLED: Set to 'true' to enable S3 storage
+- SOCKET_S3_BUCKET: S3 bucket name
+- SOCKET_S3_ACCESS_KEY: S3 access key
+- SOCKET_S3_SECRET_KEY: S3 secret key
+- SOCKET_S3_ENDPOINT: S3 endpoint (defaults to AWS S3)
+- SOCKET_S3_REGION: S3 region (defaults to us-east-1)
+
+Files are stored as: bucket/repo/branch/.socket.facts.json
+The consolidator compares with previous scans and identifies new alerts.
+
+GitHub Actions Support:
+The consolidator handles detached HEAD states common in CI environments and
+automatically extracts repository/branch information from GitHub Actions
+environment variables when available.
 """
 
 import json
 import os
+import subprocess
 import uuid
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
+
+try:
+    from light_s3_client import Client
+    S3_AVAILABLE = True
+except ImportError:
+    S3_AVAILABLE = False
 
 
 class SocketFactsConsolidator:
@@ -24,6 +58,51 @@ class SocketFactsConsolidator:
         self.consolidated_facts = {
             "components": []
         }
+        # S3 configuration
+        self.s3_enabled = self._is_s3_enabled()
+        self.s3_client = self._init_s3_client() if self.s3_enabled else None
+        self.s3_bucket = os.environ.get('SOCKET_S3_BUCKET', 'security-wrapper')
+        self.s3_endpoint = os.environ.get('SOCKET_S3_ENDPOINT')
+    
+    def _is_s3_enabled(self) -> bool:
+        """Check if S3 upload is enabled and properly configured."""
+        return (
+            S3_AVAILABLE and
+            bool(os.environ.get('SOCKET_S3_ENABLED', '').lower() in ('true', '1', 'yes')) and
+            bool(os.environ.get('SOCKET_S3_BUCKET')) and
+            bool(os.environ.get('SOCKET_S3_ACCESS_KEY')) and
+            bool(os.environ.get('SOCKET_S3_SECRET_KEY'))
+        )
+    
+    def _init_s3_client(self) -> Optional[Any]:
+        """Initialize S3 client if enabled and available."""
+        if not S3_AVAILABLE:
+            return None
+        
+        try:
+            endpoint = os.environ.get('SOCKET_S3_ENDPOINT')
+            region = os.environ.get('SOCKET_S3_REGION', 'us-east-1')
+            access_key = os.environ.get('SOCKET_S3_ACCESS_KEY')
+            secret_key = os.environ.get('SOCKET_S3_SECRET_KEY')
+            
+            if endpoint:
+                # Use server parameter for custom endpoints (like MinIO) but still provide region
+                return Client(
+                    server=endpoint,
+                    region=region,
+                    access_key=access_key,
+                    secret_key=secret_key
+                )
+            else:
+                # Use region for AWS S3 (default)
+                return Client(
+                    region=region,
+                    access_key=access_key,
+                    secret_key=secret_key
+                )
+        except Exception as e:
+            print(f"Warning: Failed to initialize S3 client: {e}")
+            return None
     
     def load_existing_socket_facts(self, facts_file_path: str = ".socket.facts.json") -> Dict[str, Any]:
         """Load existing socket facts file if it exists."""
@@ -33,11 +112,198 @@ class SocketFactsConsolidator:
         except (FileNotFoundError, json.JSONDecodeError):
             return {"components": []}
     
+    def _get_git_repository_info(self) -> Dict[str, Any]:
+        """Get git repository information including repo name, branch, and timestamp."""
+        repo_info = {}
+        
+        # Check for environment variable overrides first
+        env_repo = os.environ.get('SOCKET_REPOSITORY_NAME') or os.environ.get('GITHUB_REPOSITORY')
+        env_branch = os.environ.get('SOCKET_BRANCH_NAME') or os.environ.get('GITHUB_REF_NAME')
+        
+        # Get repository name
+        if env_repo:
+            # For GITHUB_REPOSITORY, extract just the repo name (owner/repo -> repo)
+            repo_info["repository"] = env_repo.split('/')[-1] if '/' in env_repo else env_repo
+        else:
+            # Try to get from git remote
+            try:
+                result = subprocess.run(
+                    ["git", "remote", "get-url", "origin"],
+                    cwd=self.workspace_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    remote_url = result.stdout.strip()
+                    # Extract repo name from URL (handles both SSH and HTTPS)
+                    if remote_url:
+                        # Remove .git suffix if present
+                        if remote_url.endswith('.git'):
+                            remote_url = remote_url[:-4]
+                        # Extract repo name from the end of the URL
+                        repo_name = remote_url.split('/')[-1]
+                        repo_info["repository"] = repo_name
+            except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, OSError):
+                # Git command failed or git not available - this is OK
+                pass
+        
+        # Get branch name
+        if env_branch:
+            repo_info["branch"] = env_branch
+        else:
+            # Try to get from git
+            try:
+                # First try to get the current branch
+                result = subprocess.run(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                    cwd=self.workspace_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    branch = result.stdout.strip()
+                    # Handle detached HEAD state (common in CI/GitHub Actions)
+                    if branch == "HEAD":
+                        # Try to get the branch from GitHub environment variables
+                        if os.environ.get('GITHUB_HEAD_REF'):  # For pull requests
+                            repo_info["branch"] = os.environ.get('GITHUB_HEAD_REF')
+                        elif os.environ.get('GITHUB_REF'):  # For pushes
+                            github_ref = os.environ.get('GITHUB_REF')
+                            if github_ref.startswith('refs/heads/'):
+                                repo_info["branch"] = github_ref.replace('refs/heads/', '')
+                            else:
+                                repo_info["branch"] = "detached-head"
+                        else:
+                            repo_info["branch"] = "detached-head"
+                    else:
+                        repo_info["branch"] = branch
+            except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError, OSError):
+                # Git command failed or git not available - this is OK
+                pass
+        
+        # Add scan timestamp
+        repo_info["scan_timestamp"] = datetime.now(timezone.utc).isoformat()
+        
+        return repo_info
+    
+    def _get_s3_key(self, repository: str, branch: str) -> str:
+        """Generate S3 key in format: repo/branch/.socket.facts.json"""
+        return f"{repository}/{branch}/.socket.facts.json"
+    
+    def _download_previous_facts(self, repository: str, branch: str) -> Optional[Dict[str, Any]]:
+        """Download previous facts file from S3 if it exists."""
+        if not self.s3_enabled or not self.s3_client:
+            return None
+        
+        try:
+            s3_key = self._get_s3_key(repository, branch)
+            # Use download_file method and read from temporary file
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='r', delete=True) as temp_file:
+                success = self.s3_client.download_file(self.s3_bucket, s3_key, temp_file.name)
+                if success:
+                    with open(temp_file.name, 'r') as f:
+                        content = f.read()
+                    return json.loads(content)
+                else:
+                    return None
+        except Exception as e:
+            print(f"Info: No previous facts file found in S3 or error downloading: {e}")
+            return None
+    
+    def _upload_facts_to_s3(self, facts: Dict[str, Any], repository: str, branch: str) -> bool:
+        """Upload facts file to S3."""
+        if not self.s3_enabled or not self.s3_client:
+            return False
+        
+        try:
+            s3_key = self._get_s3_key(repository, branch)
+            facts_json = json.dumps(facts, indent=2)
+            
+            # Convert to bytes for upload
+            facts_bytes = facts_json.encode('utf-8')
+            
+            success = self.s3_client.upload_fileobj(facts_bytes, self.s3_bucket, s3_key)
+            
+            if success:
+                print(f"Successfully uploaded facts to S3: s3://{self.s3_bucket}/{s3_key}")
+                return True
+            else:
+                print(f"Failed to upload facts to S3")
+                return False
+        except Exception as e:
+            print(f"Error uploading facts to S3: {e}")
+            return False
+    
+    def _find_new_alerts(self, current_facts: Dict[str, Any], previous_facts: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Find new alerts by comparing current facts with previous facts."""
+        if not previous_facts:
+            # If no previous facts, all alerts are new
+            return self._extract_all_alerts(current_facts)
+        
+        current_alerts = self._extract_all_alerts(current_facts)
+        previous_alerts = self._extract_all_alerts(previous_facts)
+        
+        # Create a set of previous alert signatures for comparison
+        previous_signatures = set()
+        for alert in previous_alerts:
+            signature = self._create_alert_signature(alert)
+            previous_signatures.add(signature)
+        
+        # Find new alerts
+        new_alerts = []
+        for alert in current_alerts:
+            signature = self._create_alert_signature(alert)
+            if signature not in previous_signatures:
+                new_alerts.append(alert)
+        
+        return new_alerts
+    
+    def _extract_all_alerts(self, facts: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract all alerts from facts components."""
+        all_alerts = []
+        for component in facts.get("components", []):
+            component_alerts = component.get("alerts", [])
+            for alert in component_alerts:
+                # Add component context to alert
+                alert_with_context = alert.copy()
+                alert_with_context["component_name"] = component.get("name", "unknown")
+                alert_with_context["component_type"] = component.get("type", "unknown")
+                all_alerts.append(alert_with_context)
+        return all_alerts
+    
+    def _create_alert_signature(self, alert: Dict[str, Any]) -> str:
+        """Create a unique signature for an alert to enable comparison."""
+        # Use key fields that uniquely identify an alert
+        signature_parts = [
+            alert.get("type", ""),
+            alert.get("title", ""),
+            alert.get("description", ""),
+            alert.get("component_name", ""),
+            str(alert.get("manifestFiles", [])),  # Convert to string for hashing
+        ]
+        return "|".join(signature_parts)
+    
     def consolidate_all_results(self, temp_output_dir: str = ".") -> Dict[str, Any]:
         """Consolidate all security tool results into a single socket facts format."""
         # Start with existing socket facts (from Socket tools)
         socket_facts_path = os.path.join(self.workspace_path, ".socket.facts.json")
         consolidated = self.load_existing_socket_facts(socket_facts_path)
+        
+        # Add git repository information at the top level
+        repo_info = self._get_git_repository_info()
+        consolidated.update(repo_info)
+        
+        # Get repository and branch for S3 operations
+        repository = consolidated.get("repository", "unknown-repo")
+        branch = consolidated.get("branch", "unknown-branch")
+        
+        # Download previous facts from S3 if enabled
+        previous_facts = None
+        if self.s3_enabled:
+            previous_facts = self._download_previous_facts(repository, branch)
         
         # Add external security findings as synthetic components with alerts
         external_components = []
@@ -59,6 +325,19 @@ class SocketFactsConsolidator:
         # Add external components to consolidated facts
         if external_components:
             consolidated["components"].extend(external_components)
+        
+        # Find new alerts if we have previous facts
+        if previous_facts:
+            new_alerts = self._find_new_alerts(consolidated, previous_facts)
+            consolidated["new_alerts"] = new_alerts
+            consolidated["new_alerts_count"] = len(new_alerts)
+            print(f"Found {len(new_alerts)} new alerts since last scan")
+        else:
+            print("No previous facts found - all alerts are considered new")
+        
+        # Upload current facts to S3 if enabled
+        if self.s3_enabled:
+            self._upload_facts_to_s3(consolidated, repository, branch)
         
         return consolidated
     

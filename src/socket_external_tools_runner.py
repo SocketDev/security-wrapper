@@ -13,7 +13,15 @@ from core.connectors.eslint import ESLint
 from core.connectors.socket import Socket
 from core.connectors.socket_sca import SocketSCA
 from core.socket_facts_processor import SocketFactsProcessor
-from core.load_plugins import load_sumo_logic_plugin, load_ms_sentinel_plugin, load_console_plugin
+from core.load_plugins import (
+    load_sumo_logic_plugin, 
+    load_ms_sentinel_plugin, 
+    load_console_plugin,
+    load_jira_plugin,
+    load_slack_plugin,
+    load_teams_plugin,
+    load_webhook_plugin
+)
 from tabulate import tabulate
 
 logging.basicConfig(level=logging.INFO)
@@ -82,6 +90,10 @@ def consolidate_trivy_results(pattern: str) -> dict:
 sumo_client = load_sumo_logic_plugin()
 ms_sentinel = load_ms_sentinel_plugin()
 console_output = load_console_plugin()
+jira_client = load_jira_plugin()
+slack_client = load_slack_plugin()
+teams_client = load_teams_plugin()
+webhook_client = load_webhook_plugin()
 
 # Dynamically build tool classes and names based on enabled inputs
 TOOL_CLASSES = {}
@@ -175,6 +187,23 @@ def main():
             socket_sca_metrics = facts_processor.process_socket_sca_alerts(facts_data, os.getcwd(), "SocketSCA")
             if socket_sca_metrics.get("output") or socket_sca_metrics.get("scan_failed"):
                 results["socket_sca"] = socket_sca_metrics
+        
+        # Process consolidated facts for Jira integration
+        if jira_client:
+            # Check if there are any security alerts in the facts data
+            total_alerts = sum(len(component.get("alerts", [])) for component in facts_data.get("components", []))
+            if total_alerts > 0:
+                print("Processing consolidated security alerts for Jira integration.")
+                jira_result = jira_client.send_consolidated_security_alerts(facts_data)
+                if jira_result.get("status") == "error":
+                    print(f"Jira error: {jira_result.get('message', 'Unknown error')}")
+                elif jira_result.get("status") == "success":
+                    if jira_result.get("created"):
+                        print(f"Created new Jira ticket: {jira_result.get('issue_key')}")
+                    elif jira_result.get("comment_added"):
+                        print(f"Added new alerts to existing Jira ticket: {jira_result.get('issue_key')}")
+                    else:
+                        print(f"Jira ticket up to date: {jira_result.get('issue_key', 'No new alerts')}")
         
     else:
         print("Using legacy individual tool output format")
@@ -304,11 +333,21 @@ def main():
                     print("Issues detected with Security Tools. Please check Microsoft Sentinel Events")
                 if console_output:
                     print("Issues detected with Security Tools.")
+                if jira_client:
+                    print("Issues detected with Security Tools. Creating Jira tickets.")
+                if slack_client:
+                    print("Issues detected with Security Tools. Sending Slack notifications.")
+                if teams_client:
+                    print("Issues detected with Security Tools. Sending Teams notifications.")
+                if webhook_client:
+                    print("Issues detected with Security Tools. Sending webhook notifications.")
 
         for key, events in tool_events.items():
             tool_name = f"SocketSecurityTools-{TOOL_NAMES[key]}"
             formatted_events = [json.dumps(event, default=lambda o: o.to_json()) for event in
                                 events.get("events", [])]
+            event_objects = events.get("events", [])
+            
             if sumo_client:
                 print(errors) if (errors := sumo_client.send_events(formatted_events, tool_name)) else []
 
@@ -317,6 +356,29 @@ def main():
 
             if console_output:
                 print(errors) if (errors := console_output.print_events(events.get("output", []), key)) else []
+                
+            # New plugins that work with event objects
+            if jira_client:
+                # Only use legacy processing if we don't have consolidated facts
+                if not os.path.exists(".socket.facts.json"):
+                    result = jira_client.send_events(event_objects, tool_name)
+                    if result.get("status") == "error":
+                        print(f"Jira error: {result.get('message', 'Unknown error')}")
+
+            if slack_client:
+                result = slack_client.send_events(event_objects, tool_name)
+                if result.get("status") == "error":
+                    print(f"Slack error: {result.get('message', 'Unknown error')}")
+
+            if teams_client:
+                result = teams_client.send_events(event_objects, tool_name)
+                if result.get("status") == "error":
+                    print(f"Teams error: {result.get('message', 'Unknown error')}")
+
+            if webhook_client:
+                result = webhook_client.send_events(event_objects, tool_name)
+                if result.get("status") == "error":
+                    print(f"Webhook error: {result.get('message', 'Unknown error')}")
         
         if scan_failed:
             print("Security scan failed - exiting with error")

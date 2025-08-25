@@ -57,10 +57,15 @@ jobs:
           image_enabled: true
           secret_scanning_enabled: true
           socket_scanning_enabled: true
+          socket_scanning_enabled: true
 
           # Trivy Configuration
           docker_images: "image:latest,test/image2:latest"
           dockerfiles: "Dockerfile,relative/path/Dockerfile"
+
+          # Socket Configuration
+          socket_org: "your-socket-org"  # Required when socket_scanning_enabled is true
+          socket_api_key: ${{ secrets.SOCKET_API_KEY }}
 
           # Socket Configuration
           socket_org: "your-socket-org"  # Required when socket_scanning_enabled is true
@@ -154,6 +159,9 @@ docker run --rm --name security-wrapper \
   -e "INPUT_PYTHON_SAST_ENABLED=true" \
   -e "PYTHONUNBUFFERED=1" \
   -e "INPUT_SECRET_SCANNING_ENABLED=true" \
+  -e "INPUT_SOCKET_SCANNING_ENABLED=true" \
+  -e "INPUT_SOCKET_ORG=your-socket-org" \  # Required when socket_scanning_enabled is true
+  -e "INPUT_SOCKET_API_KEY=your-socket-api-key" \
   -e "INPUT_SOCKET_SCANNING_ENABLED=true" \
   -e "INPUT_SOCKET_ORG=your-socket-org" \  # Required when socket_scanning_enabled is true
   -e "INPUT_SOCKET_API_KEY=your-socket-api-key" \

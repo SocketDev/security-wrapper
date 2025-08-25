@@ -26,4 +26,5 @@ file_generator.py
 .env
 *.md
 test_results
+local_tests/*
 local_tests

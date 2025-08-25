@@ -157,6 +157,62 @@ inputs:
     required: false
     default: "REPLACE_ME"
 
+  # Jira Configuration
+  jira_enabled:
+    description: "Enable Jira ticket creation"
+    required: false
+    default: "false"
+  jira_url:
+    description: "Jira instance URL"
+    required: false
+    default: ""
+  jira_email:
+    description: "Jira user email"
+    required: false
+    default: ""
+  jira_api_token:
+    description: "Jira API token"
+    required: false
+    default: ""
+  jira_project:
+    description: "Jira project key"
+    required: false
+    default: ""
+
+  # Slack Configuration
+  slack_enabled:
+    description: "Enable Slack notifications"
+    required: false
+    default: "false"
+  slack_webhook_url:
+    description: "Slack webhook URL"
+    required: false
+    default: ""
+
+  # Teams Configuration
+  teams_enabled:
+    description: "Enable Microsoft Teams notifications"
+    required: false
+    default: "false"
+  teams_webhook_url:
+    description: "Teams webhook URL"
+    required: false
+    default: ""
+
+  # Webhook Configuration
+  webhook_enabled:
+    description: "Enable generic webhook notifications"
+    required: false
+    default: "false"
+  webhook_url:
+    description: "Webhook URL"
+    required: false
+    default: ""
+  webhook_headers:
+    description: "Custom webhook headers as JSON string"
+    required: false
+    default: ""
+
   # Scan Scope Configuration
   scan_all:
     description: "If true, always scan the whole directory regardless of git or file list."
