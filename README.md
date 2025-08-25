@@ -105,6 +105,26 @@ jobs:
 
 You can run the security-wrapper locally using Docker. This is useful for testing changes or scanning code outside of GitHub Actions.
 
+### Prerequisites
+
+This project uses [uv](https://docs.astral.sh/uv/) for Python package management. Install it with:
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Local Python Development
+
+For local Python development without Docker:
+
+```sh
+# Install dependencies
+uv sync
+
+# Run the security wrapper directly
+uv run python src/socket_external_tools_runner.py
+```
+
 ### Build the Docker Image
 
 ```sh
@@ -142,8 +162,27 @@ docker run --rm --name security-wrapper \
   socketdev/security-wrapper
 ```
 
+## Version Management
+
+This project uses automated version management with uv and pyproject.toml:
+
+- **Version Source**: `pyproject.toml` is the source of truth for version numbers
+- **Runtime Version**: `src/version.py` is auto-synced and imported by the application
+- **Pre-commit Hooks**: Automatic version checking and bumping via `.hooks/version-check.py`
+
+### Setup Version Management
+
+```sh
+# Install the pre-commit hook
+python3 .hooks/setup.py --install-hook
+
+# Manual version checking
+python3 .hooks/version-check.py        # Auto-bump patch version if unchanged
+python3 .hooks/version-check.py --dev  # Create dev versions (1.0.18.dev1, etc.)
+```
+
 **Notes:**
 - You can adjust the environment variables to enable/disable specific scanners.
 - For image scanning, Docker-in-Docker must be enabled, and you may need to add a `docker pull` step before running.
 - Results will be printed to the console or output as JSON, depending on `INPUT_SOCKET_CONSOLE_MODE`.
-- You can also run the wrapper directly with Bash and Python for rapid local development (see `entrypoint.sh`).
+- You can also run the wrapper directly with Bash and Python/uv for rapid local development (see `entrypoint.sh`).

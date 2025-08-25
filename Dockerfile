@@ -5,6 +5,9 @@ COPY src/core /core
 COPY entrypoint.sh /
 ENV PATH=$PATH:/usr/local/go/bin
 
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 # Setup Golang
 RUN curl -sfL https://go.dev/dl/go1.23.2.linux-amd64.tar.gz > go1.23.2.linux-amd64.tar.gz
 RUN rm -rf /usr/local/go && tar -C /usr/local -xzf go1.23.2.linux-amd64.tar.gz
@@ -20,8 +23,9 @@ RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/
 # Install Trufflehog
 RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
 
-# Install Bandit
-RUN pip install bandit socketsecurity
+# Install Bandit using uv as a tool
+RUN uv tool install bandit
+ENV PATH="/root/.local/bin:$PATH"
 
 # Install eslint
 RUN apt-get update && apt-get install -y curl && \
@@ -29,13 +33,19 @@ RUN apt-get update && apt-get install -y curl && \
     apt-get install -y nodejs && \
     npm install -g eslint eslint-plugin-security @typescript-eslint/parser @typescript-eslint/eslint-plugin socket
 
+# Install Socket CLI tools
+RUN npm install -g socket
+RUN uv tool install socketsecurity
+
 # Copy the entrypoint script and make it executable
 RUN chmod +x /entrypoint.sh
 
 
-COPY requirements.txt /scripts/requirements.txt
-# Install Python dependencies from requirements.txt
-RUN pip install -r /scripts/requirements.txt
+COPY pyproject.toml uv.lock /scripts/
+# Install Python dependencies using uv
+WORKDIR /scripts
+RUN uv sync --frozen
+ENV PATH="/scripts/.venv/bin:$PATH"
 
 # Define entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
