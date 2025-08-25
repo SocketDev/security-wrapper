@@ -16,13 +16,7 @@ TRIVY_RULES=${INPUT_TRIVY_RULES:-}
 # Socket configuration
 SOCKET_ORG=${INPUT_SOCKET_ORG:-}
 SOCKET_API_KEY=${INPUT_SOCKET_API_KEY:-}
-SOCKET_SECURITY_API_KEY=${INPUT_SOCKET_SECURITY_API_KEY:-}
-SOCKET_SCA_FILES=${INPUT_SOCKET_SCA_FILES:-}
-
-# Socket configuration
-SOCKET_ORG=${INPUT_SOCKET_ORG:-}
-SOCKET_API_KEY=${INPUT_SOCKET_API_KEY:-}
-SOCKET_SECURITY_API_KEY=${INPUT_SOCKET_SECURITY_API_KEY:-}
+export SOCKET_SECURITY_API_KEY=${INPUT_SOCKET_SECURITY_API_KEY:-}
 SOCKET_SCA_FILES=${INPUT_SOCKET_SCA_FILES:-}
 
 # Set output directory for temp files
@@ -153,14 +147,17 @@ if [[ "$INPUT_SOCKET_SCA_ENABLED" == "true" ]]; then
     fi
     
     # Extract JSON from the output (Socket CLI outputs JSON after log messages)
-    # Look for lines that start with a timestamp followed by JSON
-    if grep -q '": {' "$temp_output_file"; then
-        # Extract the JSON part (everything after the timestamp that contains JSON)
-        # Use a more specific pattern to remove the timestamp: YYYY-MM-DD HH:MM:SS,mmm: 
-        grep '": {' "$temp_output_file" | tail -1 | sed 's/^[0-9-]*[[:space:]]*[0-9:,]*:[[:space:]]*{/{/' > "$TEMP_OUTPUT_DIR/socket_sca_output.json"
+    # Look for the final JSON output line which contains the complete result
+    if grep -q '^[0-9-]*[[:space:]]*[0-9:,]*:[[:space:]]*{' "$temp_output_file"; then
+        # Extract the JSON part (everything after the timestamp)
+        # Use a more specific pattern to remove the timestamp and get the JSON: YYYY-MM-DD HH:MM:SS,mmm: {...}
+        grep '^[0-9-]*[[:space:]]*[0-9:,]*:[[:space:]]*{' "$temp_output_file" | tail -1 | sed 's/^[0-9-]*[[:space:]]*[0-9:,]*:[[:space:]]*//' > "$TEMP_OUTPUT_DIR/socket_sca_output.json"
+        echo "Successfully extracted Socket SCA JSON output"
     else
         # If no JSON found, create a failure JSON
         echo "No valid JSON output from Socket SCA, creating failure JSON"
+        echo "Output file contents:"
+        cat "$temp_output_file"
         echo '{"scan_failed": true, "new_alerts": [], "error": "Socket SCA command failed or produced invalid output"}' > "$TEMP_OUTPUT_DIR/socket_sca_output.json"
     fi
     
@@ -326,16 +323,10 @@ fi
 echo "Consolidating security tool results into .socket.facts.json format"
 if [[ "$DEV_MODE" == "true" ]]; then
   CONSOLIDATOR_SCRIPT_PATH="$WORKSPACE/src/core/socket_facts_consolidator.py"
-else
-  CONSOLIDATOR_SCRIPT_PATH="$WORKSPACE/socket_facts_consolidator.py"
-fi
-
-# Consolidate all security tool results into .socket.facts.json format
-echo "Consolidating security tool results into .socket.facts.json format"
-if [[ "$DEV_MODE" == "true" ]]; then
   CONSOLIDATOR_SCRIPT_DIR="$WORKSPACE/src"
 else
-  CONSOLIDATOR_SCRIPT_DIR="$WORKSPACE"
+  CONSOLIDATOR_SCRIPT_PATH="$WORKSPACE/socket_facts_consolidator.py"
+  CONSOLIDATOR_SCRIPT_DIR="/socket-security-tools"
 fi
 
 python -c "
@@ -346,6 +337,16 @@ from core.socket_facts_consolidator import SocketFactsConsolidator
 consolidator = SocketFactsConsolidator('$GITHUB_WORKSPACE')
 consolidator.save_consolidated_facts('$GITHUB_WORKSPACE/.socket.facts.json')
 print('Successfully consolidated security tool results into .socket.facts.json')
+
+# Debug: Check if consolidation worked
+import json
+try:
+    with open('$GITHUB_WORKSPACE/.socket.facts.json', 'r') as f:
+        data = json.load(f)
+    total_alerts = sum(len(component.get('alerts', [])) for component in data.get('components', []))
+    print(f'DEBUG: Consolidated facts has {len(data.get(\"components\", []))} components and {total_alerts} alerts')
+except Exception as e:
+    print(f'DEBUG: Error reading consolidated facts: {e}')
 " || echo "Warning: Could not consolidate results, continuing with individual tool processing"
 
 # Run the Python script from the correct directory and path
@@ -354,7 +355,7 @@ if [[ -n "$PY_SCRIPT_PATH" ]]; then
 elif [[ "$DEV_MODE" == "true" ]]; then
   FINAL_PY_SCRIPT_PATH="$WORKSPACE/src/socket_external_tools_runner.py"
 else
-  FINAL_PY_SCRIPT_PATH="$WORKSPACE/socket_external_tools_runner.py"
+  FINAL_PY_SCRIPT_PATH="/socket-security-tools/socket_external_tools_runner.py"
 fi
 
 if [[ -f "$FINAL_PY_SCRIPT_PATH" ]]; then

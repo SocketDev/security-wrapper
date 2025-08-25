@@ -1,8 +1,13 @@
 # Use the official Python image as a base
 FROM python:3.12
-COPY src/socket_external_tools_runner.py /
-COPY src/core /core
-COPY entrypoint.sh /
+
+# Create application directory
+WORKDIR /socket-security-tools
+
+COPY src/socket_external_tools_runner.py /socket-security-tools/
+COPY src/version.py /socket-security-tools/
+COPY src/core /socket-security-tools/core
+COPY entrypoint.sh /socket-security-tools/
 ENV PATH=$PATH:/usr/local/go/bin
 
 # Install uv
@@ -38,14 +43,14 @@ RUN npm install -g socket
 RUN uv tool install socketsecurity
 
 # Copy the entrypoint script and make it executable
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /socket-security-tools/entrypoint.sh
 
 
 COPY pyproject.toml uv.lock /scripts/
 # Install Python dependencies using uv
 WORKDIR /scripts
-RUN uv sync --frozen
+RUN uv sync --frozen && uv pip install light-s3-client
 ENV PATH="/scripts/.venv/bin:$PATH"
 
 # Define entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/socket-security-tools/entrypoint.sh"]

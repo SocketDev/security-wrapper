@@ -26,40 +26,51 @@ class Jira:
         :return: A dict with response information
         """
         if not self.config.get("enabled", False):
+            print("Jira plugin is not enabled")
             return {"status": "disabled"}
         
+        print("Jira Plugin Enabled - Processing consolidated security alerts")
         log.debug("Jira Plugin Enabled - Processing consolidated security alerts")
         
         # Extract repository and branch information
         repository = facts_data.get("repository", "unknown-repo")
         branch = facts_data.get("branch", "unknown-branch")
+        print(f"Repository: {repository}, Branch: {branch}")
         
         # Create ticket summary
         ticket_summary = f"Socket Security Issues detected in {repository} - {branch}"
+        print(f"Ticket summary: {ticket_summary}")
         
         # Check if ticket already exists
+        print("Checking for existing tickets...")
         existing_ticket = self._find_existing_ticket(ticket_summary)
         
         # Get all alerts from the facts data
         all_alerts = self._extract_alerts_from_facts(facts_data)
+        print(f"Found {len(all_alerts)} total alerts in facts data")
         
         if not all_alerts:
+            print("No security alerts found in facts data")
             log.info("No security alerts found in facts data")
             return {"status": "success", "message": "No alerts to process"}
         
         # Get new alerts if we have previous scan data
         new_alerts = facts_data.get("new_alerts", all_alerts)
+        print(f"New alerts to process: {len(new_alerts)}")
         
         if existing_ticket:
             # Update existing ticket with new alerts only
             if new_alerts:
+                print(f"Found existing ticket {existing_ticket['key']}, adding {len(new_alerts)} new alerts")
                 log.info(f"Found existing ticket {existing_ticket['key']}, adding {len(new_alerts)} new alerts")
                 return self._add_comment_to_ticket(existing_ticket["key"], new_alerts, repository, branch)
             else:
+                print(f"Found existing ticket {existing_ticket['key']}, no new alerts to add")
                 log.info(f"Found existing ticket {existing_ticket['key']}, no new alerts to add")
                 return {"status": "success", "message": "No new alerts to add", "issue_key": existing_ticket["key"]}
         else:
             # Create new ticket with all alerts
+            print(f"Creating new ticket with {len(all_alerts)} security alerts")
             log.info(f"Creating new ticket with {len(all_alerts)} security alerts")
             return self._create_new_ticket(ticket_summary, all_alerts, repository, branch)
 
@@ -125,6 +136,9 @@ class Jira:
                 alert_with_context = alert.copy()
                 alert_with_context["component_name"] = component.get("name", "unknown")
                 alert_with_context["component_type"] = component.get("type", "unknown")
+                alert_with_context["component_purl"] = component.get("purl", "")
+                alert_with_context["tool"] = component.get("type", "unknown")  # Tool is the component type
+                alert_with_context["source"] = component.get("purl", "")       # Source is the PURL
                 all_alerts.append(alert_with_context)
         
         return all_alerts
@@ -166,6 +180,7 @@ class Jira:
             }
         }
 
+        auth = base64.b64encode(f"{self.email}:{self.api_token}".encode()).decode()
         headers = {
             "Authorization": f"Basic {auth}",
             "Content-Type": "application/json"
@@ -174,15 +189,61 @@ class Jira:
         jira_url = f"{self.url}/rest/api/3/issue"
         
         try:
+            print(f"Making Jira API request to: {jira_url}")
+            print(f"Project: {self.project}")
+            print(f"Summary: {summary}")
+            print(f"Email: {self.email}")
+            print(f"API Token starts with: {self.api_token[:10]}...")
+            
+            # First, test authentication by getting project info
+            
+            # Test project access
+            project_url = f"{self.url}/rest/api/3/project/{self.project}"
+            print(f"Testing project access: {project_url}")
+            test_response = requests.get(project_url, headers=headers)
+            print(f"Project access response: {test_response.status_code}")
+            
+            if test_response.status_code == 200:
+                project_data = test_response.json()
+                print(f"Project name: {project_data.get('name', 'Unknown')}")
+                print(f"Project key: {project_data.get('key', 'Unknown')}")
+            else:
+                print(f"Project access failed: {test_response.text}")
+            
+            # Get available issue types for this project
+            issue_types_url = f"{self.url}/rest/api/3/issue/createmeta?projectKeys={self.project}"
+            print(f"Getting issue types: {issue_types_url}")
+            issue_types_response = requests.get(issue_types_url, headers=headers)
+            print(f"Issue types response: {issue_types_response.status_code}")
+            
+            if issue_types_response.status_code == 200:
+                meta_data = issue_types_response.json()
+                projects = meta_data.get('projects', [])
+                if projects:
+                    issue_types = projects[0].get('issuetypes', [])
+                    print(f"Available issue types: {[it.get('name') for it in issue_types]}")
+                    
+                    # Use the first available issue type instead of hardcoded "Task"
+                    if issue_types:
+                        issue_type_name = issue_types[0].get('name', 'Task')
+                        print(f"Using issue type: {issue_type_name}")
+                        payload["fields"]["issuetype"] = {"name": issue_type_name}
+            else:
+                print(f"Could not get issue types: {issue_types_response.text}")
+                
             response = requests.post(jira_url, json=payload, headers=headers)
+            print(f"Jira API response status: {response.status_code}")
             if response.status_code >= 300:
+                print(f"Jira error {response.status_code}: {response.text}")
                 log.error(f"Jira error {response.status_code}: {response.text}")
                 return {"status": "error", "message": response.text}
             else:
                 issue_key = response.json().get('key')
+                print(f"✅ Jira ticket created successfully: {issue_key}")
                 log.info(f"Jira ticket created: {issue_key}")
                 return {"status": "success", "issue_key": issue_key, "created": True}
         except Exception as e:
+            print(f"❌ Failed to create Jira ticket: {str(e)}")
             log.error(f"Failed to create Jira ticket: {str(e)}")
             return {"status": "error", "message": str(e)}
 
@@ -258,11 +319,12 @@ class Jira:
         header_row = {
             "type": "tableRow",
             "content": [
-                make_cell("Tool Type"),
+                make_cell("Tool"),
                 make_cell("Rule/Test Name"),
                 make_cell("Severity"),
                 make_cell("File"),
                 make_cell("Line"),
+                make_cell("Source"),
                 make_cell("Description")
             ]
         }
@@ -271,21 +333,23 @@ class Jira:
 
         for alert in alerts:
             # Extract alert information with consistent field mapping
-            tool_type = self._get_tool_type_display(alert.get("type", "unknown"))
+            tool = self._extract_tool_from_purl(alert.get("source", alert.get("component_purl", ""))) or alert.get("tool", alert.get("component_type", "unknown"))
             rule_name = self._extract_rule_name(alert)
             severity = alert.get("severity", "unknown").upper()
             file_path = self._extract_file_path(alert)
             line_number = self._extract_line_number(alert)
+            source = self._clean_purl_source(alert.get("source", alert.get("component_purl", "")))
             description = self._extract_description(alert)
 
             row = {
                 "type": "tableRow",
                 "content": [
-                    make_cell(tool_type),
+                    make_cell(tool),
                     make_cell(rule_name),
                     make_cell(severity),
                     make_cell(file_path),
                     make_cell(line_number),
+                    make_cell(source),
                     make_cell(description)
                 ]
             }
@@ -340,6 +404,47 @@ class Jira:
             props.get("message") or 
             "No description available"
         )[:200] + ("..." if len(str(props.get("description", ""))) > 200 else "")
+
+    def _extract_tool_from_purl(self, purl: str) -> str:
+        """Extract tool type from PURL's type parameter."""
+        if not purl or "?type=" not in purl:
+            return ""
+        
+        try:
+            # Extract the type parameter from the PURL
+            # Format: pkg:ecosystem/name@version?type=tool-type
+            type_part = purl.split("?type=")[1]
+            # Handle multiple parameters by taking only the first one
+            tool_type = type_part.split("&")[0]
+            return tool_type
+        except (IndexError, AttributeError):
+            return ""
+
+    def _clean_purl_source(self, purl: str) -> str:
+        """Clean PURL by removing type parameter and empty query string."""
+        if not purl:
+            return ""
+        
+        try:
+            # Remove the type parameter
+            if "?type=" in purl:
+                # Split on ?type= and take the first part
+                base_purl = purl.split("?type=")[0]
+                
+                # Check if there are other parameters after type=
+                type_section = purl.split("?type=")[1]
+                if "&" in type_section:
+                    # There are other parameters, reconstruct with remaining params
+                    remaining_params = "&".join(type_section.split("&")[1:])
+                    return f"{base_purl}?{remaining_params}"
+                else:
+                    # No other parameters, return clean base PURL
+                    return base_purl
+            else:
+                # No type parameter, return as is
+                return purl
+        except (IndexError, AttributeError):
+            return purl
 
     def send_events(self, events: list, plugin_name: str) -> dict:
         """

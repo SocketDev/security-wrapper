@@ -34,10 +34,7 @@ class SocketSCA(BaseTool):
                 plugin_name=plugin_name
             )
             
-<<<<<<< HEAD
             # Always include scan failures regardless of severity filter
-=======
->>>>>>> cb8a152 (Fixing the s3 workflow)
             test_name = cls.get_test_name(failure_result)
             metrics["tests"].setdefault(test_name, 0)
             metrics["tests"][test_name] += 1
