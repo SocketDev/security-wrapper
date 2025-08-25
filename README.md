@@ -1,6 +1,18 @@
 # Security Tools Scanning
 
-The purpose of this action is to run various security tools, process their output, and then comment the results on a PR. It is expected to only run this on PRs
+The purpose of this action is to run various security tools, process their output, and then comment the results on a PR. It is expected to only run this on PRs.
+
+## Supported Security Tools
+
+- **Bandit** - Python SAST analysis
+- **Gosec** - Golang SAST analysis  
+- **ESLint** - JavaScript/TypeScript SAST analysis
+- **Trivy** - Container image and Dockerfile vulnerability scanning
+- **Trufflehog** - Secret scanning
+- **Socket** - Dependency reachability analysis and supply chain risk scanning
+  - Uses `socket scan reach` to identify which vulnerable code paths are actually reachable in your application
+  - Includes stack trace information for reachable vulnerabilities to help with remediation
+  - Note: This is different from Socket SCA scanning which analyzes all dependencies
 
 ## Example Usage
 
@@ -33,10 +45,15 @@ jobs:
           dockerfile_enabled: true
           image_enabled: true
           secret_scanning_enabled: true
+          socket_scanning_enabled: true
 
           # Trivy Configuration
           docker_images: "image:latest,test/image2:latest"
           dockerfiles: "Dockerfile,relative/path/Dockerfile"
+
+          # Socket Configuration
+          socket_org: "your-socket-org"  # Required when socket_scanning_enabled is true
+          socket_api_key: ${{ secrets.SOCKET_API_KEY }}
 
           # Exclusion settings
           trufflehog_exclude_dir: "node_modules/*,vendor,.git/*,.idea"
@@ -106,6 +123,9 @@ docker run --rm --name security-wrapper \
   -e "INPUT_PYTHON_SAST_ENABLED=true" \
   -e "PYTHONUNBUFFERED=1" \
   -e "INPUT_SECRET_SCANNING_ENABLED=true" \
+  -e "INPUT_SOCKET_SCANNING_ENABLED=true" \
+  -e "INPUT_SOCKET_ORG=your-socket-org" \  # Required when socket_scanning_enabled is true
+  -e "INPUT_SOCKET_API_KEY=your-socket-api-key" \
   -e "SOCKET_SCM_DISABLED=true" \
   -e "INPUT_SOCKET_CONSOLE_MODE=json" \
   socketdev/security-wrapper

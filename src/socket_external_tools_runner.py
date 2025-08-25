@@ -9,6 +9,8 @@ from core.connectors.gosec import Gosec
 from core.connectors.trufflehog import Trufflehog
 from core.connectors.trivy import TrivyImage, TrivyDockerfile
 from core.connectors.eslint import ESLint
+from core.connectors.socket import Socket
+from core.connectors.socket_sca import SocketSCA
 from core.load_plugins import load_sumo_logic_plugin, load_ms_sentinel_plugin, load_console_plugin
 from tabulate import tabulate
 
@@ -100,34 +102,55 @@ if os.getenv("INPUT_TRIVY_DOCKERFILE_ENABLED", "false").lower() == "true":
 if os.getenv("INPUT_JAVASCRIPT_SAST_ENABLED", "false").lower() == "true":
     TOOL_CLASSES["eslint"] = ESLint
     TOOL_NAMES["eslint"] = "ESLint"
+if os.getenv("INPUT_SOCKET_SCANNING_ENABLED", "false").lower() == "true":
+    TOOL_CLASSES["socket"] = Socket
+    TOOL_NAMES["socket"] = "SocketReachability"
+if os.getenv("INPUT_SOCKET_SCA_ENABLED", "false").lower() == "true":
+    TOOL_CLASSES["socket_sca"] = SocketSCA
+    TOOL_NAMES["socket_sca"] = "SocketSCA"
 
 def main():
+    # Get the output directory for temp files
+    temp_output_dir = os.getenv("TEMP_OUTPUT_DIR", ".")
+    
+    def get_output_file_path(filename):
+        """Get the full path to an output file based on TEMP_OUTPUT_DIR"""
+        return os.path.join(temp_output_dir, filename)
+    
     # Load results only for enabled tools
     results = {}
     if "bandit" in TOOL_CLASSES:
-        bandit_data = load_json("bandit_output.json", "Bandit")
+        bandit_data = load_json(get_output_file_path("bandit_output.json"), "Bandit")
         if bandit_data:
             results["bandit"] = bandit_data
     if "gosec" in TOOL_CLASSES:
-        gosec_data = load_json("gosec_output.json", "Gosec")
+        gosec_data = load_json(get_output_file_path("gosec_output.json"), "Gosec")
         if gosec_data:
             results["gosec"] = gosec_data
     if "trufflehog" in TOOL_CLASSES:
-        trufflehog_data = load_json("trufflehog_output.json", "Trufflehog")
+        trufflehog_data = load_json(get_output_file_path("trufflehog_output.json"), "Trufflehog")
         if trufflehog_data:
             results["trufflehog"] = trufflehog_data
     if "trivy_image" in TOOL_CLASSES:
-        trivy_image_data = consolidate_trivy_results("trivy_image_*.json")
+        trivy_image_data = consolidate_trivy_results(get_output_file_path("trivy_image_*.json"))
         if trivy_image_data and trivy_image_data.get("Results"):
             results["trivy_image"] = trivy_image_data
     if "trivy_dockerfile" in TOOL_CLASSES:
-        trivy_dockerfile_data = consolidate_trivy_results("trivy_dockerfile_*.json")
+        trivy_dockerfile_data = consolidate_trivy_results(get_output_file_path("trivy_dockerfile_*.json"))
         if trivy_dockerfile_data and trivy_dockerfile_data.get("Results"):
             results["trivy_dockerfile"] = trivy_dockerfile_data
     if "eslint" in TOOL_CLASSES:
-        eslint_data = load_json("eslint_output.json", "ESLint")
+        eslint_data = load_json(get_output_file_path("eslint_output.json"), "ESLint")
         if eslint_data:
             results["eslint"] = eslint_data
+    if "socket" in TOOL_CLASSES:
+        socket_data = load_json(".socket.facts.json", "Socket")
+        if socket_data:
+            results["socket"] = socket_data
+    if "socket_sca" in TOOL_CLASSES:
+        socket_sca_data = load_json(get_output_file_path("socket_sca_output.json"), "SocketSCA")
+        if socket_sca_data:
+            results["socket_sca"] = socket_sca_data
 
     if any(results.values()):
         if not SCM_DISABLED:
@@ -167,7 +190,14 @@ def main():
                 TOOL_CLASSES[key].default_severities = SEVERITIES
                 tool_events[key] = TOOL_CLASSES[key].process_output(data, cwd, TOOL_NAMES[key])
 
-        if len(tool_events) > 0:
+        # Check for scan failures that should force an exit regardless of other conditions
+        scan_failed = False
+        for key, data in results.items():
+            if isinstance(data, dict) and data.get("scan_failed", False):
+                print(f"{TOOL_NAMES.get(key, key)} scan failed")
+                scan_failed = True
+
+        if len(tool_events) > 0 or scan_failed:
             # Only show integration messages if there is at least one event
             total_events = sum(len(events.get("events", [])) for events in tool_events.values())
             if total_events > 0:
@@ -190,6 +220,9 @@ def main():
 
             if console_output:
                 print(errors) if (errors := console_output.print_events(events.get("output", []), key)) else []
+        
+        if scan_failed:
+            print("Security scan failed - exiting with error")
         exit(1)
     else:
         print("No issues detected with Socket Security Tools")

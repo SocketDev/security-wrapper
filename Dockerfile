@@ -1,5 +1,5 @@
 # Use the official Python image as a base
-FROM python:3.9
+FROM python:3.12
 COPY src/socket_external_tools_runner.py /
 COPY src/core /core
 COPY entrypoint.sh /
@@ -17,18 +17,17 @@ RUN curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh
 # Install Trivy
 RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.18.3
 
-#Install Trufflehog
-# Install trufflehog
+# Install Trufflehog
 RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
 
 # Install Bandit
-RUN pip install bandit
+RUN pip install bandit socketsecurity
 
 # Install eslint
 RUN apt-get update && apt-get install -y curl && \
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
-    npm install -g eslint eslint-plugin-security @typescript-eslint/parser @typescript-eslint/eslint-plugin
+    npm install -g eslint eslint-plugin-security @typescript-eslint/parser @typescript-eslint/eslint-plugin socket
 
 # Copy the entrypoint script and make it executable
 RUN chmod +x /entrypoint.sh

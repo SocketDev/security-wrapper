@@ -41,6 +41,16 @@ inputs:
     required: false
     default: "false"
 
+  socket_scanning_enabled:
+    description: "Enable Socket reachability scanning"
+    required: false
+    default: "false"
+
+  socket_sca_enabled:
+    description: "Enable Socket SCA (Software Composition Analysis) scanning"
+    required: false
+    default: "false"
+
   # Docker Configuration
   docker_images:
     description: "Comma-separated list of Docker images to scan"
@@ -64,6 +74,24 @@ inputs:
     description: "Show unverified secrets in Trufflehog results"
     required: false
     default: "false"
+
+  # Socket Configuration
+  socket_org:
+    description: "Socket organization for reachability scanning (required if socket_scanning_enabled is true)"
+    required: false
+    default: ""
+  socket_api_key:
+    description: "Socket API key for authentication"
+    required: false
+    default: ""
+  socket_security_api_key:
+    description: "Socket Security API key for SCA scanning (required if socket_sca_enabled is true)"
+    required: false
+    default: ""
+  socket_sca_files:
+    description: "Comma-separated list of manifest files to scan (e.g., package.json,requirements.txt,go.mod)"
+    required: false
+    default: ""
 
   # Bandit Configuration
   bandit_exclude_dir:
