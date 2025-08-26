@@ -1,6 +1,6 @@
 [project]
 name = "security-wrapper"
-version = "1.0.25"
+version = "1.0.26"
 description = "Security tools scanning wrapper"
 requires-python = ">=3.9"
 dependencies = [

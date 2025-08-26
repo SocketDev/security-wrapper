@@ -365,20 +365,15 @@ class SocketFactsConsolidator:
             components_with_vulnerabilities += 1
             component_alerts = []
             
-            # Update component for socket-reachability type if it has vulnerabilities
-            original_purl = component.get("purl", "")
+            # Keep the original ecosystem type (npm, pypi, etc.) for Socket components
+            # per the constraint that Socket Reachability and SCA should use ecosystem types
+            original_type = component.get("type", "unknown")
             
-            if not original_purl:
-                # Create PURL if it doesn't exist
-                ecosystem = component.get("type", "unknown")  # npm, pypi, etc.
-                name = component.get("name", "unknown")
-                version = component.get("version", "unknown")
-                original_purl = f"pkg:{ecosystem}/{name}@{version}"
-            
-            if "?type=" not in original_purl:
-                # Add socket-reachability type to PURL
-                component["purl"] = f"{original_purl}?type=socket-reachability"
-                component["type"] = "socket-reachability"
+            # Add qualifiers to indicate this is Socket-processed data
+            if "qualifiers" not in component:
+                component["qualifiers"] = {}
+            component["qualifiers"]["socket_processed"] = True
+            component["qualifiers"]["has_vulnerability_data"] = True
             
             # Create reachability lookup for faster access
             reachability_lookup = {}
@@ -403,9 +398,9 @@ class SocketFactsConsolidator:
                     for reach in reachability_matches
                 )
                 
-                # Create alert for this vulnerability
+                # Create alert for this vulnerability using the original ecosystem type
                 alert = {
-                    "type": "socket-reachability", 
+                    "type": original_type,  # Keep ecosystem type (npm, pypi, etc.)
                     "severity": "high" if is_reachable else "medium",  # Reachable vulns are higher severity
                     "generatedBy": "socket",
                     "props": {
@@ -415,7 +410,13 @@ class SocketFactsConsolidator:
                         "installedVersion": component.get("version", "unknown"),
                         "range": vuln.get("range", "unknown"),
                         "reachable": is_reachable,
-                        "reachabilityData": reachability_info.get("reachabilityData", {}) if is_reachable else None
+                        "vulnerability_details": {
+                            "ghsa_id": ghsa_id,
+                            "range": vuln.get("range", "unknown"),
+                            "reachability_pattern": vuln.get("reachabilityData", {}).get("pattern", []),
+                            "undeterminable_reachability": vuln.get("reachabilityData", {}).get("undeterminableReachability", False)
+                        },
+                        "reachabilityData": vuln.get("reachabilityData", {}) if is_reachable else None
                     },
                     "location": {
                         "files": component.get("manifestFiles", [])
@@ -454,7 +455,7 @@ class SocketFactsConsolidator:
         if not results:
             return []
         
-        # Group by file to create components
+        # Group by file to create components with file as qualifier
         file_components = {}
         
         for issue in results:
@@ -466,19 +467,24 @@ class SocketFactsConsolidator:
             if filename not in file_components:
                 file_components[filename] = {
                     "id": str(uuid.uuid4()),
-                    "type": "sast-bandit",
-                    "name": f"bandit-scan-{filename.replace('/', '-')}",
-                    "version": "1.0.25",
-                    "purl": f"pkg:private/{filename.replace('/', '-')}@1.0.25?type=sast-bandit",
+                    "type": "generic",  # Generic type for SAST
+                    "name": f"sast-bandit-{filename.replace('/', '-')}",
+                    "version": "1.0.0",
+                    "purl": f"pkg:generic/sast-bandit@1.0.0",
                     "direct": True,
                     "dev": False,
                     "manifestFiles": [{"file": filename, "start": 1, "end": 1}],
+                    "qualifiers": {
+                        "file": filename,
+                        "tool": "bandit",
+                        "scan_type": "sast"
+                    },
                     "alerts": []
                 }
             
-            # Create alert for this issue
+            # Create alert for this issue with code block in properties
             alert = {
-                "type": "sast-bandit",
+                "type": "generic",
                 "severity": self._map_bandit_severity(issue.get("issue_severity", "UNKNOWN")),
                 "generatedBy": "bandit",
                 "props": {
@@ -487,7 +493,14 @@ class SocketFactsConsolidator:
                     "test_id": issue.get("test_id", ""),
                     "confidence": issue.get("issue_confidence", ""),
                     "cwe": issue.get("issue_cwe", {}),
-                    "more_info": issue.get("more_info", "")
+                    "more_info": issue.get("more_info", ""),
+                    "code_block": {
+                        "start_line": issue.get("line_number", 1),
+                        "end_line": issue.get("line_number", 1),
+                        "column_start": issue.get("col_offset", 0),
+                        "column_end": issue.get("end_col_offset", 0),
+                        "code": issue.get("code", "")
+                    }
                 },
                 "location": {
                     "file": filename,
@@ -518,7 +531,7 @@ class SocketFactsConsolidator:
         if not issues:
             return []
         
-        # Group by file to create components
+        # Group by file to create components with file as qualifier
         file_components = {}
         
         for issue in issues:
@@ -530,19 +543,24 @@ class SocketFactsConsolidator:
             if filename not in file_components:
                 file_components[filename] = {
                     "id": str(uuid.uuid4()),
-                    "type": "sast-gosec",
-                    "name": f"gosec-scan-{filename.replace('/', '-')}",
-                    "version": "1.0.25",
-                    "purl": f"pkg:private/{filename.replace('/', '-')}@1.0.25?type=sast-gosec",
+                    "type": "generic",  # Generic type for SAST
+                    "name": f"sast-gosec-{filename.replace('/', '-')}",
+                    "version": "1.0.0",
+                    "purl": f"pkg:generic/sast-gosec@1.0.0",
                     "direct": True,
                     "dev": False,
                     "manifestFiles": [{"file": filename, "start": 1, "end": 1}],
+                    "qualifiers": {
+                        "file": filename,
+                        "tool": "gosec",
+                        "scan_type": "sast"
+                    },
                     "alerts": []
                 }
             
-            # Create alert for this issue
+            # Create alert for this issue with code block in properties
             alert = {
-                "type": "sast-gosec",
+                "type": "generic",
                 "severity": self._map_gosec_severity(issue.get("severity", "UNKNOWN")),
                 "generatedBy": "gosec",
                 "props": {
@@ -550,7 +568,14 @@ class SocketFactsConsolidator:
                     "description": issue.get("details", ""),
                     "confidence": issue.get("confidence", ""),
                     "cwe": issue.get("cwe", {}),
-                    "nosec": issue.get("nosec", False)
+                    "nosec": issue.get("nosec", False),
+                    "code_block": {
+                        "start_line": int(issue.get("line", 1)),
+                        "end_line": int(issue.get("line", 1)),
+                        "column_start": int(issue.get("column", 0)),
+                        "column_end": int(issue.get("column", 0)),
+                        "code": issue.get("code", "")
+                    }
                 },
                 "location": {
                     "file": filename,
@@ -580,7 +605,7 @@ class SocketFactsConsolidator:
         if not isinstance(data, list):
             return []
         
-        # Group by file to create components
+        # Group by file to create components with file as qualifier
         file_components = {}
         
         for file_result in data:
@@ -596,13 +621,18 @@ class SocketFactsConsolidator:
             if filename not in file_components:
                 file_components[filename] = {
                     "id": str(uuid.uuid4()),
-                    "type": "sast-eslint",
-                    "name": f"eslint-scan-{filename.replace('/', '-')}",
-                    "version": "1.0.25",
-                    "purl": f"pkg:private/{filename.replace('/', '-')}@1.0.25?type=sast-eslint",
+                    "type": "generic",  # Generic type for SAST
+                    "name": f"sast-eslint-{filename.replace('/', '-')}",
+                    "version": "1.0.0",
+                    "purl": f"pkg:generic/sast-eslint@1.0.0",
                     "direct": True,
                     "dev": False,
                     "manifestFiles": [{"file": filename, "start": 1, "end": 1}],
+                    "qualifiers": {
+                        "file": filename,
+                        "tool": "eslint",
+                        "scan_type": "sast"
+                    },
                     "alerts": []
                 }
             
@@ -612,14 +642,21 @@ class SocketFactsConsolidator:
                     continue
                 
                 alert = {
-                    "type": "sast-eslint",
+                    "type": "generic",
                     "severity": "medium",  # ESLint errors are typically medium severity
                     "generatedBy": "eslint",
                     "props": {
                         "name": message.get("ruleId", "unknown"),
                         "description": message.get("message", ""),
                         "nodeType": message.get("nodeType", ""),
-                        "source": message.get("source", "")
+                        "source": message.get("source", ""),
+                        "code_block": {
+                            "start_line": message.get("line", 1),
+                            "end_line": message.get("endLine", message.get("line", 1)),
+                            "column_start": message.get("column", 0),
+                            "column_end": message.get("endColumn", message.get("column", 0)),
+                            "code": message.get("source", "")
+                        }
                     },
                     "location": {
                         "file": filename,
@@ -660,7 +697,7 @@ class SocketFactsConsolidator:
         if not secrets:
             return []
         
-        # Group by file to create components
+        # Group by file to create components with file as qualifier
         file_components = {}
         
         for secret in secrets:
@@ -682,19 +719,24 @@ class SocketFactsConsolidator:
             if filename not in file_components:
                 file_components[filename] = {
                     "id": str(uuid.uuid4()),
-                    "type": "secrets-trufflehog",
-                    "name": f"trufflehog-scan-{filename.replace('/', '-')}",
-                    "version": "1.0.25",
-                    "purl": f"pkg:private/{filename.replace('/', '-')}@1.0.25?type=secrets-trufflehog",
+                    "type": "generic",  # Generic type for secrets
+                    "name": f"secrets-trufflehog-{filename.replace('/', '-')}",
+                    "version": "1.0.0",
+                    "purl": f"pkg:generic/secrets-trufflehog@1.0.0",
                     "direct": True,
                     "dev": False,
                     "manifestFiles": [{"file": filename, "start": 1, "end": 1}],
+                    "qualifiers": {
+                        "file": filename,
+                        "tool": "trufflehog",
+                        "scan_type": "secrets"
+                    },
                     "alerts": []
                 }
             
             # Create alert for this secret
             alert = {
-                "type": "secrets-trufflehog",
+                "type": "generic",
                 "severity": "high",  # Secrets are typically high severity
                 "generatedBy": "trufflehog",
                 "props": {
@@ -703,7 +745,12 @@ class SocketFactsConsolidator:
                     "verified": secret.get("Verified", False),
                     "detector_type": secret.get("DetectorType", ""),
                     "source_name": secret.get("SourceName", ""),
-                    "raw_preview": secret.get("Raw", "")[:50] + "..." if len(secret.get("Raw", "")) > 50 else secret.get("Raw", "")
+                    "raw_preview": secret.get("Raw", "")[:50] + "..." if len(secret.get("Raw", "")) > 50 else secret.get("Raw", ""),
+                    "code_block": {
+                        "start_line": line_number,
+                        "end_line": line_number,
+                        "code": secret.get("Raw", "")[:100] + "..." if len(secret.get("Raw", "")) > 100 else secret.get("Raw", "")
+                    }
                 },
                 "location": {
                     "file": filename,
@@ -757,20 +804,25 @@ class SocketFactsConsolidator:
             
             component = {
                 "id": str(uuid.uuid4()),
-                "type": scan_type,
+                "type": "generic",  # Generic type for container scanning
                 "name": f"trivy-scan-{target.replace('/', '-').replace(':', '-')}",
-                "version": "1.0.25",
-                "purl": f"pkg:private/{target.replace('/', '-').replace(':', '-')}@1.0.25?type={scan_type}",
+                "version": "1.0.0",
+                "purl": f"pkg:generic/trivy@1.0.0",
                 "direct": True,
                 "dev": False,
                 "manifestFiles": [{"file": target, "start": 1, "end": 1}],
+                "qualifiers": {
+                    "target": target,
+                    "tool": "trivy",
+                    "scan_type": scan_type.replace("-trivy", "")  # container or dockerfile
+                },
                 "alerts": []
             }
             
             # Process vulnerabilities
             for vuln in vulnerabilities:
                 alert = {
-                    "type": scan_type,
+                    "type": "generic",
                     "severity": self._map_trivy_severity(vuln.get("Severity", "UNKNOWN")),
                     "generatedBy": "trivy",
                     "props": {
@@ -779,7 +831,13 @@ class SocketFactsConsolidator:
                         "pkgName": vuln.get("PkgName", ""),
                         "installedVersion": vuln.get("InstalledVersion", ""),
                         "fixedVersion": vuln.get("FixedVersion", ""),
-                        "references": vuln.get("References", [])
+                        "references": vuln.get("References", []),
+                        "vulnerability_details": {
+                            "package": vuln.get("PkgName", ""),
+                            "installed_version": vuln.get("InstalledVersion", ""),
+                            "fixed_version": vuln.get("FixedVersion", ""),
+                            "vulnerability_id": vuln.get("VulnerabilityID", "")
+                        }
                     },
                     "location": {
                         "file": target
@@ -790,7 +848,7 @@ class SocketFactsConsolidator:
             # Process misconfigurations
             for misconf in misconfigurations:
                 alert = {
-                    "type": scan_type,
+                    "type": "generic",
                     "severity": self._map_trivy_severity(misconf.get("Severity", "UNKNOWN")),
                     "generatedBy": "trivy",
                     "props": {
@@ -799,7 +857,12 @@ class SocketFactsConsolidator:
                         "title": misconf.get("Title", ""),
                         "message": misconf.get("Message", ""),
                         "resolution": misconf.get("Resolution", ""),
-                        "references": misconf.get("References", [])
+                        "references": misconf.get("References", []),
+                        "code_block": {
+                            "start_line": misconf.get("CauseMetadata", {}).get("StartLine", 1),
+                            "end_line": misconf.get("CauseMetadata", {}).get("EndLine", 1),
+                            "code": misconf.get("CauseMetadata", {}).get("Code", "")
+                        }
                     },
                     "location": {
                         "file": target,
@@ -830,15 +893,20 @@ class SocketFactsConsolidator:
         if data.get("scan_failed", False):
             return [{
                 "id": str(uuid.uuid4()),
-                "type": "sca-socket",
+                "type": "generic",  # Generic type for scan failures
                 "name": "socket-sca-scan-failed",
-                "version": "1.0.25",
-                "purl": "pkg:private/socket-sca-scan@1.0.25?type=sca-socket",
+                "version": "1.0.0",
+                "purl": "pkg:generic/socket-sca-scan@1.0.0",
                 "direct": True,
                 "dev": False,
                 "manifestFiles": [{"file": ".", "start": 1, "end": 1}],
+                "qualifiers": {
+                    "tool": "socket-sca",
+                    "scan_type": "sca",
+                    "status": "failed"
+                },
                 "alerts": [{
-                    "type": "sca-socket",
+                    "type": "generic",
                     "severity": "critical",
                     "generatedBy": "socket-sca",
                     "props": {
@@ -854,7 +922,7 @@ class SocketFactsConsolidator:
         if not new_alerts:
             return []
         
-        # Group alerts by package/file
+        # Group alerts by package/ecosystem
         package_components = {}
         
         for alert in new_alerts:
@@ -862,41 +930,58 @@ class SocketFactsConsolidator:
             ecosystem = alert.get("ecosystem", "unknown")  # e.g., npm, pypi, etc.
             version = alert.get("version", "unknown")
             
-            if package_name not in package_components:
-                # Create proper PURL for real packages with socket-sca type
-                if ecosystem != "unknown" and package_name != "unknown":
-                    purl = f"pkg:{ecosystem}/{package_name}@{version}?type=sca-socket"
-                else:
-                    purl = f"pkg:private/socket-sca-{package_name}@1.0.25?type=sca-socket"
+            # Use package name + ecosystem as the key to properly group
+            component_key = f"{ecosystem}:{package_name}"
+            
+            if component_key not in package_components:
+                # For Socket SCA, use the actual ecosystem type (npm, pypi, etc.)
+                # instead of generic, following the constraint that Socket types should be ecosystem types
+                component_type = ecosystem if ecosystem != "unknown" else "generic"
                 
-                package_components[package_name] = {
+                # Create proper PURL for real packages
+                if ecosystem != "unknown" and package_name != "unknown":
+                    purl = f"pkg:{ecosystem}/{package_name}@{version}"
+                else:
+                    purl = f"pkg:generic/socket-sca-{package_name}@1.0.0"
+                
+                package_components[component_key] = {
                     "id": str(uuid.uuid4()),
-                    "type": "sca-socket",
-                    "name": f"socket-sca-{package_name}",
+                    "type": component_type,  # Use ecosystem type for Socket SCA/Reachability
+                    "name": package_name,
                     "version": version,
                     "purl": purl,
                     "direct": True,
                     "dev": False,
                     "manifestFiles": [{"file": alert.get("file", "unknown"), "start": 1, "end": 1}],
+                    "qualifiers": {
+                        "tool": "socket-sca",
+                        "scan_type": "sca",
+                        "ecosystem": ecosystem
+                    },
                     "alerts": []
                 }
             
             socket_alert = {
-                "type": "sca-socket",
+                "type": component_type if ecosystem != "unknown" else "generic",
                 "severity": self._map_socket_sca_severity(alert.get("severity", "unknown")),
                 "generatedBy": "socket-sca",
                 "props": {
                     "name": alert.get("type", "unknown"),
                     "description": alert.get("description", ""),
                     "category": alert.get("category", ""),
-                    "subcategory": alert.get("subcategory", "")
+                    "subcategory": alert.get("subcategory", ""),
+                    "package_details": {
+                        "package": package_name,
+                        "ecosystem": ecosystem,
+                        "version": version
+                    }
                 },
                 "location": {
                     "file": alert.get("file", "unknown")
                 }
             }
             
-            package_components[package_name]["alerts"].append(socket_alert)
+            package_components[component_key]["alerts"].append(socket_alert)
         
         return list(package_components.values())
     
