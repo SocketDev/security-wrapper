@@ -101,10 +101,43 @@ jobs:
           ms_sentinel_workspace_id: REPLACE_ME
           ms_sentinel_shared_key: REPLACE_ME
 
+          # Slack integration
+          slack_enabled: true
+          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
           # Scan scope settings
           scan_all: false   # Set to true to always scan the whole directory
           scan_files: ""    # Comma-separated list of files to scan (overrides git diff)
 ```
+
+## Integration Configuration
+
+### Slack Integration
+
+Send security alerts to Slack channels using webhook integration:
+
+```yaml
+slack_enabled: true
+slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+To set up Slack webhooks:
+1. Go to your Slack workspace settings
+2. Create a new Incoming Webhook for your desired channel
+3. Copy the webhook URL and add it to your GitHub repository secrets as `SLACK_WEBHOOK_URL`
+4. Enable the integration in your workflow with the parameters shown above
+
+### Other Integrations
+
+The security wrapper also supports:
+
+- **Jira Integration**: Create tickets for security findings
+- **Microsoft Teams**: Send alerts to Teams channels
+- **Webhook**: Send to custom webhook endpoints
+- **Sumo Logic**: Forward logs to Sumo Logic
+- **Microsoft Sentinel**: Send events to Azure Sentinel
+
+For configuration details of these integrations, see the source code in `src/core/plugins/`.
 
 ## Local Development & Testing
 
@@ -167,6 +200,9 @@ docker run --rm --name security-wrapper \
   -e "INPUT_SOCKET_API_KEY=your-socket-api-key" \
   -e "SOCKET_SCM_DISABLED=true" \
   -e "INPUT_SOCKET_CONSOLE_MODE=json" \
+  # Optional: Slack integration
+  # -e "INPUT_SLACK_ENABLED=true" \
+  # -e "INPUT_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK" \
   socketdev/security-wrapper
 ```
 

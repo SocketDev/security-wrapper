@@ -390,13 +390,18 @@ class SocketFactsConsolidator:
                 
                 # Get reachability info for this vulnerability
                 reachability_info = reachability_lookup.get(ghsa_id, {})
-                reachability_matches = reachability_info.get("reachability", [])
+                reachability_data = reachability_info.get("reachability", [])
                 
-                # Check if vulnerability is reachable
-                is_reachable = any(
-                    reach.get("type") == "reachable" 
-                    for reach in reachability_matches
-                )
+                # Extract matches from reachable entries and check if reachable
+                is_reachable = False
+                reachability_matches = []
+                
+                for reach_item in reachability_data:
+                    if reach_item and reach_item.get("type") == "reachable":
+                        is_reachable = True
+                        matches = reach_item.get("matches", [])
+                        if matches:
+                            reachability_matches.extend(matches)
                 
                 # Create alert for this vulnerability using the original ecosystem type
                 alert = {
@@ -413,10 +418,10 @@ class SocketFactsConsolidator:
                         "vulnerability_details": {
                             "ghsa_id": ghsa_id,
                             "range": vuln.get("range", "unknown"),
-                            "reachability_pattern": vuln.get("reachabilityData", {}).get("pattern", []),
-                            "undeterminable_reachability": vuln.get("reachabilityData", {}).get("undeterminableReachability", False)
+                            "reachability_pattern": (vuln.get("reachabilityData") or {}).get("pattern", []),
+                            "undeterminable_reachability": (vuln.get("reachabilityData") or {}).get("undeterminableReachability", False)
                         },
-                        "reachabilityData": vuln.get("reachabilityData", {}) if is_reachable else None
+                        "reachabilityData": (vuln.get("reachabilityData") or {}) if is_reachable else None
                     },
                     "location": {
                         "files": component.get("manifestFiles", [])
@@ -703,8 +708,8 @@ class SocketFactsConsolidator:
         for secret in secrets:
             source_metadata = secret.get("SourceMetadata", {})
             data = source_metadata.get("Data", {})
-            filename = data.get("Filesystem", {}).get("file", "unknown")
-            line_number = data.get("Filesystem", {}).get("line", 1)
+            filename = (data.get("Filesystem") or {}).get("file", "unknown")
+            line_number = (data.get("Filesystem") or {}).get("line", 1)
             
             # Normalize filename relative to workspace
             if filename.startswith("/workspace/"):
@@ -859,15 +864,15 @@ class SocketFactsConsolidator:
                         "resolution": misconf.get("Resolution", ""),
                         "references": misconf.get("References", []),
                         "code_block": {
-                            "start_line": misconf.get("CauseMetadata", {}).get("StartLine", 1),
-                            "end_line": misconf.get("CauseMetadata", {}).get("EndLine", 1),
-                            "code": misconf.get("CauseMetadata", {}).get("Code", "")
+                            "start_line": (misconf.get("CauseMetadata") or {}).get("StartLine", 1),
+                            "end_line": (misconf.get("CauseMetadata") or {}).get("EndLine", 1),
+                            "code": (misconf.get("CauseMetadata") or {}).get("Code", "")
                         }
                     },
                     "location": {
                         "file": target,
-                        "start": misconf.get("CauseMetadata", {}).get("StartLine", 1),
-                        "end": misconf.get("CauseMetadata", {}).get("EndLine", 1)
+                        "start": (misconf.get("CauseMetadata") or {}).get("StartLine", 1),
+                        "end": (misconf.get("CauseMetadata") or {}).get("EndLine", 1)
                     }
                 }
                 component["alerts"].append(alert)
