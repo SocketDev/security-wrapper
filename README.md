@@ -1,6 +1,29 @@
 # Security Tools Scanning
 
-The purpose of this action is to run various security tools, process their output, and then comment the results on a PR. It is expected to only run this on PRs
+The purpose of this action is to run various security tools, process their output, and then comment the results on a PR. It is expected to only run this on PRs.
+
+## New: Consolidated Socket Facts Format
+
+Starting with version 2.0.0, all security tool results are consolidated into a unified `.socket.facts.json` format. This provides:
+
+- **Unified Processing**: All security findings in a single, consistent format
+- **Enhanced Integration**: Easier integration with Socket's dependency analysis
+- **Custom Components**: Support for organization-specific component types
+- **Backward Compatibility**: Existing workflows continue to work unchanged
+
+The consolidated format extends Socket's dependency data with external security findings from SAST scanners, secret scanners, and container scanners.
+
+## Supported Security Tools
+
+- **Bandit** - Python SAST analysis
+- **Gosec** - Golang SAST analysis  
+- **ESLint** - JavaScript/TypeScript SAST analysis
+- **Trivy** - Container image and Dockerfile vulnerability scanning
+- **Trufflehog** - Secret scanning
+- **Socket** - Dependency reachability analysis and supply chain risk scanning
+  - Uses `socket scan reach` to identify which vulnerable code paths are actually reachable in your application
+  - Includes stack trace information for reachable vulnerabilities to help with remediation
+  - Note: This is different from Socket SCA scanning which analyzes all dependencies
 
 ## Example Usage
 
@@ -33,10 +56,20 @@ jobs:
           dockerfile_enabled: true
           image_enabled: true
           secret_scanning_enabled: true
+          socket_scanning_enabled: true
+          socket_scanning_enabled: true
 
           # Trivy Configuration
           docker_images: "image:latest,test/image2:latest"
           dockerfiles: "Dockerfile,relative/path/Dockerfile"
+
+          # Socket Configuration
+          socket_org: "your-socket-org"  # Required when socket_scanning_enabled is true
+          socket_api_key: ${{ secrets.SOCKET_API_KEY }}
+
+          # Socket Configuration
+          socket_org: "your-socket-org"  # Required when socket_scanning_enabled is true
+          socket_api_key: ${{ secrets.SOCKET_API_KEY }}
 
           # Exclusion settings
           trufflehog_exclude_dir: "node_modules/*,vendor,.git/*,.idea"
@@ -68,14 +101,67 @@ jobs:
           ms_sentinel_workspace_id: REPLACE_ME
           ms_sentinel_shared_key: REPLACE_ME
 
+          # Slack integration
+          slack_enabled: true
+          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
           # Scan scope settings
           scan_all: false   # Set to true to always scan the whole directory
           scan_files: ""    # Comma-separated list of files to scan (overrides git diff)
 ```
 
+## Integration Configuration
+
+### Slack Integration
+
+Send security alerts to Slack channels using webhook integration:
+
+```yaml
+slack_enabled: true
+slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+To set up Slack webhooks:
+1. Go to your Slack workspace settings
+2. Create a new Incoming Webhook for your desired channel
+3. Copy the webhook URL and add it to your GitHub repository secrets as `SLACK_WEBHOOK_URL`
+4. Enable the integration in your workflow with the parameters shown above
+
+### Other Integrations
+
+The security wrapper also supports:
+
+- **Jira Integration**: Create tickets for security findings
+- **Microsoft Teams**: Send alerts to Teams channels
+- **Webhook**: Send to custom webhook endpoints
+- **Sumo Logic**: Forward logs to Sumo Logic
+- **Microsoft Sentinel**: Send events to Azure Sentinel
+
+For configuration details of these integrations, see the source code in `src/core/plugins/`.
+
 ## Local Development & Testing
 
 You can run the security-wrapper locally using Docker. This is useful for testing changes or scanning code outside of GitHub Actions.
+
+### Prerequisites
+
+This project uses [uv](https://docs.astral.sh/uv/) for Python package management. Install it with:
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Local Python Development
+
+For local Python development without Docker:
+
+```sh
+# Install dependencies
+uv sync
+
+# Run the security wrapper directly
+uv run python src/socket_external_tools_runner.py
+```
 
 ### Build the Docker Image
 
@@ -106,13 +192,41 @@ docker run --rm --name security-wrapper \
   -e "INPUT_PYTHON_SAST_ENABLED=true" \
   -e "PYTHONUNBUFFERED=1" \
   -e "INPUT_SECRET_SCANNING_ENABLED=true" \
+  -e "INPUT_SOCKET_SCANNING_ENABLED=true" \
+  -e "INPUT_SOCKET_ORG=your-socket-org" \  # Required when socket_scanning_enabled is true
+  -e "INPUT_SOCKET_API_KEY=your-socket-api-key" \
+  -e "INPUT_SOCKET_SCANNING_ENABLED=true" \
+  -e "INPUT_SOCKET_ORG=your-socket-org" \  # Required when socket_scanning_enabled is true
+  -e "INPUT_SOCKET_API_KEY=your-socket-api-key" \
   -e "SOCKET_SCM_DISABLED=true" \
   -e "INPUT_SOCKET_CONSOLE_MODE=json" \
+  # Optional: Slack integration
+  # -e "INPUT_SLACK_ENABLED=true" \
+  # -e "INPUT_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK" \
   socketdev/security-wrapper
+```
+
+## Version Management
+
+This project uses automated version management with uv and pyproject.toml:
+
+- **Version Source**: `pyproject.toml` is the source of truth for version numbers
+- **Runtime Version**: `src/version.py` is auto-synced and imported by the application
+- **Pre-commit Hooks**: Automatic version checking and bumping via `.hooks/version-check.py`
+
+### Setup Version Management
+
+```sh
+# Install the pre-commit hook
+python3 .hooks/setup.py --install-hook
+
+# Manual version checking
+python3 .hooks/version-check.py        # Auto-bump patch version if unchanged
+python3 .hooks/version-check.py --dev  # Create dev versions (1.0.18.dev1, etc.)
 ```
 
 **Notes:**
 - You can adjust the environment variables to enable/disable specific scanners.
 - For image scanning, Docker-in-Docker must be enabled, and you may need to add a `docker pull` step before running.
 - Results will be printed to the console or output as JSON, depending on `INPUT_SOCKET_CONSOLE_MODE`.
-- You can also run the wrapper directly with Bash and Python for rapid local development (see `entrypoint.sh`).
+- You can also run the wrapper directly with Bash and Python/uv for rapid local development (see `entrypoint.sh`).

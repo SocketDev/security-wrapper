@@ -118,6 +118,25 @@ class TrivyEvent(BaseEvent):
         self.CweIDs = event.get("CweIDs", [])
 
 
+class SocketSCAEvent(BaseEvent):
+    def __init__(self, event: dict):
+        super().__init__(
+            issue_text=event.get("description", "Socket SCA scan issue"),
+            test_name=event.get("title", "Socket SCA Analysis"),
+            more_info=event.get("url", "No remediation guide available"),
+            Message=event.get("description", "Socket SCA scan issue"),
+            FilePath=event.get("manifests", "Unknown"),
+            Timestamp=event.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            Plugin="Socket SCA",
+            Severity=event.get("severity", "Unknown")
+        )
+        self.pkg_name = event.get("pkg_name", "Unknown")
+        self.pkg_version = event.get("pkg_version", "Unknown")
+        self.pkg_type = event.get("pkg_type", "Unknown")
+        self.alert_type = event.get("type", "Unknown")
+        self.suggestion = event.get("suggestion", "No suggestion available")
+
+
 class Console:
     def __init__(self, mode: str = 'console'):
         """
@@ -142,6 +161,10 @@ class Console:
                 events.append(ESLintEvent(event.__dict__))
             elif 'trivy' in plugin:
                 events.append(TrivyEvent(event.__dict__))
+            elif plugin == 'socket':
+                events.append(BanditEvent(event.__dict__))  # Use BanditEvent as a generic event for now
+            elif plugin == 'socket_sca':
+                events.append(SocketSCAEvent(event.__dict__))
             else:
                 print(f"Unknown event type {plugin}")
         return events
@@ -155,9 +178,9 @@ class Console:
         :param output_type: 'console', 'markdown', or 'json'
         :return: Formatted string (markdown/console) or JSON array (str)
         """
-        # msg = f"No events to process for {plugin} plugin. Skipping output."
+        msg = f"No events to process for {plugin} plugin. Skipping output."
         if not events or len(events) == 0:
-            # print(msg)
+            print(msg)
             return
 
         normalized = Console.normalize_events(events, plugin)

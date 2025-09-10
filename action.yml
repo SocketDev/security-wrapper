@@ -41,6 +41,16 @@ inputs:
     required: false
     default: "false"
 
+  socket_scanning_enabled:
+    description: "Enable Socket reachability scanning"
+    required: false
+    default: "false"
+
+  socket_sca_enabled:
+    description: "Enable Socket SCA (Software Composition Analysis) scanning"
+    required: false
+    default: "false"
+
   # Docker Configuration
   docker_images:
     description: "Comma-separated list of Docker images to scan"
@@ -64,6 +74,24 @@ inputs:
     description: "Show unverified secrets in Trufflehog results"
     required: false
     default: "false"
+
+  # Socket Configuration
+  socket_org:
+    description: "Socket organization for reachability scanning (required if socket_scanning_enabled is true)"
+    required: false
+    default: ""
+  socket_api_key:
+    description: "Socket API key for authentication"
+    required: false
+    default: ""
+  socket_security_api_key:
+    description: "Socket Security API key for SCA scanning (required if socket_sca_enabled is true)"
+    required: false
+    default: ""
+  socket_sca_files:
+    description: "Comma-separated list of manifest files to scan (e.g., package.json,requirements.txt,go.mod)"
+    required: false
+    default: ""
 
   # Bandit Configuration
   bandit_exclude_dir:
@@ -128,6 +156,62 @@ inputs:
     description: "Shared key for Microsoft Sentinel"
     required: false
     default: "REPLACE_ME"
+
+  # Jira Configuration
+  jira_enabled:
+    description: "Enable Jira ticket creation"
+    required: false
+    default: "false"
+  jira_url:
+    description: "Jira instance URL"
+    required: false
+    default: ""
+  jira_email:
+    description: "Jira user email"
+    required: false
+    default: ""
+  jira_api_token:
+    description: "Jira API token"
+    required: false
+    default: ""
+  jira_project:
+    description: "Jira project key"
+    required: false
+    default: ""
+
+  # Slack Configuration
+  slack_enabled:
+    description: "Enable Slack notifications"
+    required: false
+    default: "false"
+  slack_webhook_url:
+    description: "Slack webhook URL"
+    required: false
+    default: ""
+
+  # Teams Configuration
+  teams_enabled:
+    description: "Enable Microsoft Teams notifications"
+    required: false
+    default: "false"
+  teams_webhook_url:
+    description: "Teams webhook URL"
+    required: false
+    default: ""
+
+  # Webhook Configuration
+  webhook_enabled:
+    description: "Enable generic webhook notifications"
+    required: false
+    default: "false"
+  webhook_url:
+    description: "Webhook URL"
+    required: false
+    default: ""
+  webhook_headers:
+    description: "Custom webhook headers as JSON string"
+    required: false
+    default: ""
 
   # Scan Scope Configuration
   scan_all:
