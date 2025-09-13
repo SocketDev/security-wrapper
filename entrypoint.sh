@@ -165,6 +165,62 @@ if [[ "$INPUT_SOCKET_SCA_ENABLED" == "true" ]]; then
     rm -f "$temp_output_file"
 fi
 
+# Send finalization API call if both Socket scanning and SCA completed successfully
+# This ties the SCA scan and the reachability scan together, which helps the Socket team
+# debug and resolve issues faster.
+if [[ "$INPUT_SOCKET_SCANNING_ENABLED" == "true" && "$INPUT_SOCKET_SCA_ENABLED" == "true" ]]; then
+    # Check if .socket.facts.json was created successfully and extract tier1ReachabilityScanId
+    if [[ -f "$GITHUB_WORKSPACE/.socket.facts.json" ]]; then
+        tier1_scan_id=$(jq -r '.tier1ReachabilityScanId // empty' "$GITHUB_WORKSPACE/.socket.facts.json" 2>/dev/null)
+        if [[ -n "$tier1_scan_id" && "$tier1_scan_id" != "null" ]]; then
+            socket_facts_success=true
+        else
+            socket_facts_success=false
+        fi
+    else
+        socket_facts_success=false
+    fi
+
+    # Check if socket_sca_output.json exists, scan didn't fail, and extract report_run_id
+    if [[ -f "$TEMP_OUTPUT_DIR/socket_sca_output.json" ]]; then
+        scan_failed=$(jq -r '.scan_failed' "$TEMP_OUTPUT_DIR/socket_sca_output.json" 2>/dev/null)
+        if [[ "$scan_failed" == "false" ]]; then
+            report_run_id=$(jq -r '.full_scan_id // empty' "$TEMP_OUTPUT_DIR/socket_sca_output.json" 2>/dev/null)
+            if [[ -n "$report_run_id" && "$report_run_id" != "null" ]]; then
+                socket_sca_success=true
+            else
+                socket_sca_success=false
+            fi
+        else
+            socket_sca_success=false
+        fi
+    else
+        socket_sca_success=false
+    fi
+
+    # If both scans succeeded and we have the required IDs, make the API call
+    if [[ "$socket_facts_success" == "true" && "$socket_sca_success" == "true" ]]; then
+        # Make the API call with error handling
+        if response=$(curl -s -w "\n%{http_code}" \
+            -X POST "https://api.socket.dev/v0/tier1-reachability-scan/finalize" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $INPUT_SOCKET_API_KEY" \
+            -d "{\"tier1_reachability_scan_id\": \"$tier1_scan_id\", \"report_run_id\": \"$report_run_id\"}" 2>/dev/null); then
+            
+            # Extract HTTP status code (last line) and response body (everything else)
+            http_code=$(echo "$response" | tail -n1)
+            
+            if [[ "$http_code" -ge 200 && "$http_code" -lt 300 ]]; then
+                echo "Successfully sent Socket API finalization call"
+            else
+                echo "Warning: Socket API finalization call failed with HTTP $http_code"
+            fi
+        else
+            echo "Warning: Failed to send Socket API finalization call - curl command failed"
+        fi
+    fi
+fi
+
 # POSIX-compatible file collection (replace mapfile)
 scan_files=()
 if [[ "$INPUT_SCAN_ALL" == "true" ]]; then
@@ -364,3 +420,4 @@ else
   echo "Error: Python script not found at $FINAL_PY_SCRIPT_PATH" >&2
   exit 1
 fi
+
